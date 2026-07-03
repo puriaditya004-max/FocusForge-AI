@@ -1,0 +1,413 @@
+// ===========================================================
+// FocusForge AI — Database Schema (PostgreSQL + Prisma)
+// ===========================================================
+// This schema maps 1:1 to every frontend page already built:
+// Dashboard, Smart Timetable, Today's Plan, Study Room,
+// Focus Mode, Progress, AI Mentor, YouTube Suggestions,
+// Rewards + Certificate Exam, Penalties, Settings.
+//
+// Parent Panel tables are included now (StudentParentLink)
+// so the frontend-first approach doesn't require a schema
+// rewrite later — but no Parent UI is built yet, as agreed.
+// ===========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// AUTH & USERS
+// ---------------------------------------------------------
+
+enum Role {
+  STUDENT
+  PARENT
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  avatarUrl     String?
+  role          Role     @default(STUDENT)
+  createdAt     DateTime @default(now())
+
+  // Gamification (Rewards page)
+  level         Int      @default(1)
+  xp            Int      @default(0)
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveDate DateTime?
+
+  // Settings — Timetable Customization tab
+  studyStartTime String   @default("06:00") // "HH:MM"
+  studyEndTime   String   @default("22:00")
+  offDays        String[] @default(["Sun"]) // ["Mon","Tue",...]
+  dailyGoalHours Int      @default(6)
+
+  // Settings — Study Preferences tab
+  breakIntervalMin  Int    @default(45)
+  focusSensitivity  FocusSensitivity @default(MEDIUM)
+
+  // Settings — Notifications tab
+  dailyReminderOn   Boolean @default(true)
+  reminderTime      String  @default("07:30")
+  streakAlertOn     Boolean @default(true)
+  weeklySummaryOn   Boolean @default(false)
+
+  // Settings — Appearance tab
+  theme         Theme   @default(DARK)
+  accentColor   String  @default("purple")
+
+  // AI Mentor — BYOK (Bring Your Own Key)
+  // Agar student apni khud ki Anthropic API key Settings mein daale,
+  // wo yahan (encrypted-in-app-logic, plain column) store hoti hai.
+  // NULL/empty hone par backend default free Gemini key use karega.
+  mentorApiKey  String?
+
+  // Relations
+  tasks             Task[]
+  roadmapItems      RoadmapItem[]
+  focusSessions     FocusSession[]
+  userBadges        UserBadge[]
+  dailyChallenges    DailyChallenge[]
+  penaltyEvents      PenaltyEvent[]
+  certificates       Certificate[]
+  examAttempts       ExamAttempt[]
+  studyRoomMessages  StudyRoomMessage[]
+  aiMentorMessages   AiMentorMessage[]
+  savedVideos        SavedVideo[]
+  roomsCreated       Room[]             @relation("RoomsCreated")
+  roomMemberships    RoomMember[]
+
+  // Parent-Student linking (future Parent Panel)
+  parentLinksAsStudent StudentParentLink[] @relation("StudentLinks")
+  parentLinksAsParent  StudentParentLink[] @relation("ParentLinks")
+
+  @@map("users")
+}
+
+enum FocusSensitivity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Theme {
+  DARK
+  LIGHT
+}
+
+// ---------------------------------------------------------
+// PARENT PANEL (schema-ready, UI not built yet)
+// ---------------------------------------------------------
+
+model StudentParentLink {
+  id          String   @id @default(cuid())
+  studentId   String
+  parentId    String
+  connectedAt DateTime @default(now())
+
+  student User @relation("StudentLinks", fields: [studentId], references: [id])
+  parent  User @relation("ParentLinks", fields: [parentId], references: [id])
+
+  // Parent-set goals (Settings > Timetable equivalent, parent override)
+  minDailyGoalHours Int?
+
+  @@unique([studentId, parentId])
+  @@map("student_parent_links")
+}
+
+// ---------------------------------------------------------
+// TODAY'S PLAN
+// ---------------------------------------------------------
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  category    String?  // e.g. "Python", "DSA", "Revision"
+  priority    Priority @default(MEDIUM)
+  completed   Boolean  @default(false)
+  date        DateTime @default(now()) // which day this task belongs to
+  weekNumber  Int?
+  monthNumber Int?
+  createdAt   DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  subtasks Subtask[]
+
+  @@map("tasks")
+}
+
+model Subtask {
+  id        String  @id @default(cuid())
+  taskId    String
+  title     String
+  completed Boolean @default(false)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("subtasks")
+}
+
+// ---------------------------------------------------------
+// SMART TIMETABLE (roadmap)
+// ---------------------------------------------------------
+
+enum RoadmapStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model RoadmapItem {
+  id          String        @id @default(cuid())
+  userId      String
+  weekNumber  Int
+  monthNumber Int
+  monthLabel  String        // e.g. "Month 1 – Python & Basics"
+  title       String        // e.g. topic
+  description String?
+  tools       String?
+  hours       String?       // e.g. "6-8 Hrs"
+  project     String?
+  status      RoadmapStatus @default(UPCOMING)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("roadmap_items")
+}
+
+// ---------------------------------------------------------
+// FOCUS MODE / PROGRESS
+// ---------------------------------------------------------
+
+model FocusSession {
+  id             String   @id @default(cuid())
+  userId         String
+  startedAt      DateTime
+  endedAt        DateTime?
+  durationSec    Int      @default(0)
+  focusScore     Int      @default(0) // 0-100
+  distractions   Int      @default(0)
+  subject        String?  // for "Time by Subject" chart
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("focus_sessions")
+}
+
+// ---------------------------------------------------------
+// REWARDS — Badges, Streaks, Daily Challenges
+// ---------------------------------------------------------
+
+model Badge {
+  id       String @id @default(cuid())
+  code     String @unique // e.g. "FIRST_LAUNCH"
+  icon     String
+  title    String
+  desc     String
+  xpReward Int
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model DailyChallenge {
+  id     String   @id @default(cuid())
+  userId String
+  title  String
+  xp     Int
+  date   DateTime @default(now())
+  done   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("daily_challenges")
+}
+
+// ---------------------------------------------------------
+// CERTIFICATE EXAM SYSTEM
+// ---------------------------------------------------------
+
+model Certificate {
+  id                 String   @id @default(cuid())
+  userId             String
+  certificateCode    String   @unique // e.g. "CERT-PY-M1-2025"
+  title              String   // e.g. "Python – Month 1 Foundations"
+  score              Int      // percentage, must be >= 97 to exist
+  projectsCompleted  String[] // ["Simple Calculator", "To-Do List App"]
+  issuedAt           DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("certificates")
+}
+
+model ExamAttempt {
+  id                     String    @id @default(cuid())
+  userId                 String
+  topic                  String    // e.g. "Python – Month 1"
+  attemptNumber          Int       // 1 or 2 max — enforced in application logic
+  score                  Int?      // percentage, null until submitted
+  passed                 Boolean?  // true if score >= 97
+  startedAt              DateTime  @default(now())
+  submittedAt            DateTime?
+  nextAttemptAvailableAt DateTime? // set on fail: +4 days
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("exam_attempts")
+}
+
+// ---------------------------------------------------------
+// PENALTIES
+// ---------------------------------------------------------
+
+enum PenaltyType {
+  MISSED_TASK
+  LOW_FOCUS
+  STREAK_BREAK
+}
+
+enum Severity {
+  YELLOW
+  ORANGE
+  RED
+}
+
+model PenaltyEvent {
+  id             String      @id @default(cuid())
+  userId         String
+  type           PenaltyType
+  severity       Severity
+  title          String
+  xpDeducted     Int         @default(0)
+  date           DateTime    @default(now())
+  resolved       Boolean     @default(false)
+  redemptionDone Boolean     @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("penalty_events")
+}
+
+// ---------------------------------------------------------
+// STUDY ROOM (real-time chat — Socket.io reads/writes these)
+// ---------------------------------------------------------
+// Three kinds of rooms, all using the same Room model:
+// 1. Global room  -> isGlobal = true, one seeded row, everyone lands here by default
+// 2. Subject rooms -> isGlobal = false, subject set (e.g. "Python", "DSA"), seeded/curated
+// 3. Student-created rooms -> isGlobal = false, createdById set, students join manually
+//
+// Online/who's-active status is handled in-memory via Socket.io
+// (not stored in DB — it's transient). RoomMember tracks which
+// rooms a student has manually joined, so their room list persists
+// across sessions even when they're offline.
+// ---------------------------------------------------------
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String   // e.g. "Global Study Hall", "Python", "DSA Grinders"
+  subject     String?  // e.g. "Python", "DSA" — null for global/custom rooms
+  isGlobal    Boolean  @default(false)
+  createdById String?  // null for the seeded global/subject rooms
+  createdAt   DateTime @default(now())
+
+  createdBy User? @relation("RoomsCreated", fields: [createdById], references: [id])
+  messages  StudyRoomMessage[]
+  members   RoomMember[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  id       String   @id @default(cuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@map("room_members")
+}
+
+model StudyRoomMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  roomId    String
+  message   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("study_room_messages")
+}
+
+// ---------------------------------------------------------
+// AI MENTOR (chat history — will be sent as context to the AI API)
+// ---------------------------------------------------------
+
+enum MessageRole {
+  USER
+  MENTOR
+}
+
+model AiMentorMessage {
+  id        String      @id @default(cuid())
+  userId    String
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("ai_mentor_messages")
+}
+
+// ---------------------------------------------------------
+// YOUTUBE SUGGESTIONS (bookmarks)
+// ---------------------------------------------------------
+
+model SavedVideo {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?  // real YouTube ID once verified
+  title     String
+  channel   String?
+  savedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("saved_videos")
+}

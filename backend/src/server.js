@@ -1,0 +1,27 @@
+// ---------------------------------------------------------
+// server.js — actual entry point. Boots the HTTP server.
+// Socket.io (for Study Room live chat) is attached to this
+// same `httpServer` — no restructuring needed, as planned.
+// ---------------------------------------------------------
+require("dotenv").config();
+const http = require("http");
+const { Server } = require("socket.io");
+const app = require("./app");
+const studyRoomSocket = require("./sockets/studyroom.socket");
+
+const PORT = process.env.PORT || 5000;
+
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  },
+});
+
+studyRoomSocket(io);
+
+httpServer.listen(PORT, () => {
+  console.log(`✅ FocusForge AI backend running on http://localhost:${PORT}`);
+});
