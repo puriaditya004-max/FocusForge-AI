@@ -37,7 +37,7 @@ import {
 // either view saves to the same place.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const quickPrompts = [
   "What should I study today?",

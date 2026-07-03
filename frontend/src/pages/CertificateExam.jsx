@@ -30,7 +30,7 @@ import {
 // (GET/POST /api/certificate-exam) instead of localStorage.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const TOTAL_QUESTIONS = 50;
 const PASS_SCORE = 97; // percent

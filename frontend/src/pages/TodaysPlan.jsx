@@ -11,7 +11,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const priorityColors = {
   High: "text-red-400 bg-red-400/10 border border-red-400/30",

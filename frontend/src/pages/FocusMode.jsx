@@ -17,7 +17,7 @@ import { Camera, Play, Pause, RotateCcw, Timer } from "lucide-react";
 // placeholder logic (marked below) once that's ready.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const SUBJECTS = ["Python", "DSA", "ML / AI", "Projects", "Revision"];
 

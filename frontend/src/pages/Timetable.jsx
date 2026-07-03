@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import { ChevronLeft, ChevronRight, CheckCircle2, Clock, BookOpen } from "lucide-react";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const dailySchedule = [
   { time: "06:00 AM – 07:00 AM", task: "Wake Up & Fresh", details: "Exercise / Meditation / Ready", duration: "1 Hour", type: "routine" },

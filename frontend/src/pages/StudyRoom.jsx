@@ -28,8 +28,8 @@ import {
 // new_message) handles everything live.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
-const SOCKET_URL = "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const SOCKET_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace("/api", "") : "http://localhost:5000";
 
 function formatTime(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();

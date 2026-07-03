@@ -34,7 +34,7 @@ import {
 // Both will be connected in later steps.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const streakMilestoneDefs = [
   { days: 7, label: "Week Warrior", icon: "🥉", color: "from-orange-700 to-amber-600" },

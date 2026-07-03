@@ -25,7 +25,7 @@ import {
 // lets you mark them as redeemed.
 // ---------------------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const severityConfig = {
   yellow: {

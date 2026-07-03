@@ -20,7 +20,7 @@ import { Clock, CheckCircle2, Star } from "lucide-react";
 // FocusTracker is untouched (handles its own camera).
 // ---------------------------------------------
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const timetableData = [
   { time: "06:00 AM", title: "Wake Up & Fresh", status: "completed" },
