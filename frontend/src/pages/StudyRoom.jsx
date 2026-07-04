@@ -193,7 +193,7 @@ export default function StudyRoom() {
     <div className="flex min-h-screen bg-[#0f0f1a] text-white">
       <Sidebar />
 
-      <main className="flex-1 ml-56 p-6 flex flex-col gap-4">
+      <main className="flex-1 p-4 pt-16 md:p-6 md:pt-6 flex flex-col gap-4">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -202,9 +202,28 @@ export default function StudyRoom() {
           <p className="text-gray-400 text-sm mt-1">Study together, grow together</p>
         </div>
 
+        {/* Mobile-only room switcher — Room List panel is hidden below lg */}
+        <div className="lg:hidden">
+          <select
+            value={activeRoom?.id || ""}
+            onChange={(e) => {
+              const room = rooms.find((r) => r.id === e.target.value);
+              if (room) selectRoom(room);
+            }}
+            className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-500"
+          >
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.isGlobal ? "🌐 " : "# "}
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="flex gap-4 flex-1 min-h-0">
-          {/* Room List Panel */}
-          <div className="w-56 flex-shrink-0 bg-[#1a1a2e] rounded-2xl border border-white/5 p-3 flex flex-col gap-4 overflow-y-auto">
+          {/* Room List Panel — hidden on small screens to keep chat usable on mobile */}
+          <div className="hidden lg:flex w-56 flex-shrink-0 bg-[#1a1a2e] rounded-2xl border border-white/5 p-3 flex-col gap-4 overflow-y-auto">
             {roomsLoading ? (
               <div className="flex items-center justify-center py-8 text-gray-500 text-xs gap-2">
                 <Loader2 size={14} className="animate-spin" /> Loading rooms...
@@ -364,8 +383,8 @@ export default function StudyRoom() {
             </div>
           </div>
 
-          {/* Members Panel */}
-          <div className="w-64 flex-shrink-0 space-y-3">
+          {/* Members Panel — hidden below lg, same reasoning as Room List */}
+          <div className="hidden lg:block w-64 flex-shrink-0 space-y-3">
             <div className="bg-[#1a1a2e] rounded-2xl p-4 border border-white/5">
               <h2 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
                 <Users size={15} className="text-purple-400" /> Online ({onlineUsers.length})
