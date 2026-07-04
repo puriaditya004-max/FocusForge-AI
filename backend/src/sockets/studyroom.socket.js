@@ -58,13 +58,11 @@ module.exports = function studyRoomSocket(io) {
   io.use((socket, next) => {
     try {
       const rawCookie = socket.handshake.headers.cookie;
-      console.log("🔍 Socket handshake cookie header:", rawCookie);
 
       if (!rawCookie) return next(new Error("Not authenticated"));
 
       const parsed = parseCookies(rawCookie);
       const token = parsed.token;
-      console.log("🔍 Parsed token present:", Boolean(token));
 
       if (!token) return next(new Error("Not authenticated"));
 
@@ -72,7 +70,7 @@ module.exports = function studyRoomSocket(io) {
       socket.userId = decoded.userId; // known gotcha: userId, not id
       next();
     } catch (err) {
-      console.error("🔍 JWT verify failed in socket auth:", err.message);
+      console.error("Socket auth failed:", err.message);
       next(new Error("Invalid or expired session"));
     }
   });

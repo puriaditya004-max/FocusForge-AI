@@ -70,13 +70,19 @@ async function ensureTodayChallenges(userId) {
   }
 }
 
-// Award XP to a user and keep the `level` field in sync
+// Award XP to a user and keep the `level` field in sync.
+// XP is never allowed to drop below 0 (e.g. un-checking a
+// challenge shouldn't be able to push a user's total negative).
 async function addXp(userId, amount) {
+  const current = await prisma.user.findUnique({ where: { id: userId } });
+  const safeAmount =
+    amount < 0 ? -Math.min(Math.abs(amount), current.xp) : amount;
+
   const user = await prisma.user.update({
     where: { id: userId },
-    data: { xp: { increment: amount } },
+    data: { xp: { increment: safeAmount } },
   });
-  const newLevel = Math.floor(user.xp / XP_PER_LEVEL) + 1;
+  const newLevel = Math.max(1, Math.floor(user.xp / XP_PER_LEVEL) + 1);
   if (newLevel !== user.level) {
     await prisma.user.update({ where: { id: userId }, data: { level: newLevel } });
   }

@@ -203,7 +203,7 @@ export default function AiMentor() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col">
-        <TopBar userName={userName} streak={12} level={8} />
+        <TopBar userName={userName} streak={user?.currentStreak ?? 0} level={user?.level ?? 1} />
 
         <div className="px-6 mt-4 mb-6 flex-1 flex flex-col">
           <div className="mb-4">

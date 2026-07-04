@@ -149,7 +149,7 @@ export default function FocusMode() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col">
-        <TopBar userName={user?.name} streak={12} level={8} />
+        <TopBar userName={user?.name} streak={user?.currentStreak ?? 0} level={user?.level ?? 1} />
 
         <div className="px-6 mt-4 flex flex-col gap-4">
           <div>

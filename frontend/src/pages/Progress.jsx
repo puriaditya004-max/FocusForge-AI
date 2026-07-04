@@ -103,7 +103,7 @@ export default function Progress() {
       <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
         <Sidebar />
         <main className="flex-1 flex flex-col">
-          <TopBar userName={user?.name} streak={0} level={8} />
+          <TopBar userName={user?.name} streak={0} level={user?.level ?? 1} />
           <div className="px-6 mt-6">
             <p className="text-gray-400 text-sm">Loading your progress...</p>
           </div>
@@ -117,7 +117,7 @@ export default function Progress() {
       <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
         <Sidebar />
         <main className="flex-1 flex flex-col">
-          <TopBar userName={user?.name} streak={0} level={8} />
+          <TopBar userName={user?.name} streak={0} level={user?.level ?? 1} />
           <div className="px-6 mt-6">
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">
               {error || "Something went wrong loading your progress."}
@@ -151,7 +151,7 @@ export default function Progress() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col">
-        <TopBar userName={user?.name} streak={currentStreak} level={8} />
+        <TopBar userName={user?.name} streak={currentStreak} level={user?.level ?? 1} />
 
         <div className="px-6 mt-4 mb-8 flex flex-col gap-4">
           {/* Header */}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
-import { todaysTasks, getCurrentTask } from "../data/todaysTasks";
+import { getCurrentTask } from "../data/todaysTasks";
 import {
   Youtube,
   Search,
@@ -161,11 +161,31 @@ export default function YoutubeSuggestions() {
   const [liveError, setLiveError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
 
-  const currentTask = useMemo(() => getCurrentTask(todaysTasks), []);
+  const [tasks, setTasks] = useState([]);
+  const currentTask = useMemo(
+    () => (tasks.length ? getCurrentTask(tasks) : null),
+    [tasks]
+  );
 
   useEffect(() => {
     fetchSaved();
+    fetchTasks();
   }, []);
+
+  async function fetchTasks() {
+    try {
+      const res = await fetch(`${API_BASE}/tasks`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to load tasks");
+      setTasks(Array.isArray(data) ? data : []);
+    } catch (err) {
+      // Non-critical for this page — just skip the "current task" banner
+      console.error("Failed to load today's tasks:", err);
+      setTasks([]);
+    }
+  }
 
   async function fetchSaved() {
     try {
@@ -338,7 +358,7 @@ export default function YoutubeSuggestions() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col">
-        <TopBar userName={user?.name} streak={12} level={8} />
+        <TopBar userName={user?.name} streak={user?.currentStreak ?? 0} level={user?.level ?? 1} />
 
         <div className="px-6 mt-4 mb-8 flex flex-col gap-4">
           {/* Header */}
