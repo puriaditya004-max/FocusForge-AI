@@ -13,9 +13,18 @@ const PORT = process.env.PORT || 5000;
 
 const httpServer = http.createServer(app);
 
+// Same allowed-origins list as app.js — Study Room sockets need
+// to accept connections from the Android/iOS app too.
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "http://localhost:5173",
+  "https://localhost",
+  "capacitor://localhost",
+].filter(Boolean);
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: allowedOrigins,
     credentials: true,
   },
 });
