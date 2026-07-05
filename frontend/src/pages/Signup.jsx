@@ -1,18 +1,32 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, UserPlus, GraduationCap, Users, School } from "lucide-react";
 
 // ---------------------------------------------------------
 // Signup Page — same dark/purple theme as the rest of the app.
-// On success, redirects to /dashboard.
+// Now includes a role picker: Student / Parent / Teacher.
+// On success, redirects to the correct dashboard for that role.
 // ---------------------------------------------------------
+
+const ROLES = [
+  { id: "STUDENT", label: "Student", icon: GraduationCap },
+  { id: "PARENT", label: "Parent", icon: Users },
+  { id: "TEACHER", label: "Teacher", icon: School },
+];
+
+const ROLE_HOME = {
+  STUDENT: "/dashboard",
+  PARENT: "/parent-dashboard",
+  TEACHER: "/teacher-dashboard",
+};
 
 export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("STUDENT");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,8 +53,8 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      await signup(name, email, password);
-      navigate("/dashboard");
+      const user = await signup(name, email, password, role);
+      navigate(ROLE_HOME[user.role] || "/dashboard");
     } catch (err) {
       setError(err.message || "Signup failed. Please try again.");
     } finally {
@@ -51,7 +65,6 @@ export default function Signup() {
   return (
     <div className="min-h-screen bg-[#0b0b14] text-gray-100 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
-        {/* Logo / Header */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center font-bold text-white text-lg mx-auto mb-3">
             F
@@ -60,7 +73,6 @@ export default function Signup() {
           <p className="text-xs text-gray-500 mt-1">Discipline Today, Freedom Tomorrow</p>
         </div>
 
-        {/* Card */}
         <div className="bg-[#13131f] rounded-2xl border border-white/5 p-6">
           <h2 className="text-sm font-semibold mb-1">Create your account</h2>
           <p className="text-xs text-gray-500 mb-5">Start your study journey today.</p>
@@ -70,6 +82,32 @@ export default function Signup() {
               <p className="text-xs text-red-400">{error}</p>
             </div>
           )}
+
+          {/* Role picker */}
+          <div className="mb-4">
+            <label className="text-[11px] text-gray-500 mb-2 block">I am a...</label>
+            <div className="grid grid-cols-3 gap-2">
+              {ROLES.map((r) => {
+                const Icon = r.icon;
+                const active = role === r.id;
+                return (
+                  <button
+                    type="button"
+                    key={r.id}
+                    onClick={() => setRole(r.id)}
+                    className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs transition ${
+                      active
+                        ? "bg-purple-600 border-purple-600 text-white"
+                        : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>

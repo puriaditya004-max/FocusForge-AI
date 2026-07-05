@@ -16,6 +16,8 @@ import {
   LogOut,
   Menu,
   X,
+  Store,
+  Brain,
 } from "lucide-react";
 
 const navItems = [
@@ -24,7 +26,9 @@ const navItems = [
   { key: "plan", label: "Today's Plan", icon: ClipboardList, path: "/todays-plan" },
   { key: "study-room", label: "Study Room", icon: Users, path: "/study-room" },
   { key: "ai-mentor", label: "AI Mentor", icon: Bot, path: "/ai-mentor" },
+  { key: "quiz", label: "Quiz Generator", icon: Brain, path: "/quiz" },
   { key: "youtube", label: "YouTube Suggestions", icon: Youtube, path: "/youtube" },
+  { key: "classes", label: "Classes Marketplace", icon: Store, path: "/classes" },
   { key: "progress", label: "Progress", icon: BarChart3, path: "/progress" },
   { key: "rewards", label: "Rewards", icon: Trophy, path: "/rewards" },
   { key: "penalties", label: "Penalties", icon: ShieldAlert, path: "/penalties" },

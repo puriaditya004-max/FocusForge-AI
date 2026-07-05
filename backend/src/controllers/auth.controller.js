@@ -1,6 +1,12 @@
 // ---------------------------------------------------------
 // controllers/auth.controller.js
 // signup, login, logout, and "who am I" (me).
+//
+// Signup now accepts an optional `role` field:
+//   "STUDENT" (default) | "PARENT" | "TEACHER"
+// This is what powers role-based dashboards — the same
+// login page/app, but each role lands on a different home
+// screen after logging in.
 // ---------------------------------------------------------
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -12,6 +18,8 @@ const COOKIE_OPTIONS = {
   sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
+
+const VALID_ROLES = ["STUDENT", "PARENT", "TEACHER"];
 
 function signToken(user) {
   return jwt.sign(
@@ -30,7 +38,7 @@ function toSafeUser(user) {
 // POST /api/auth/signup
 async function signup(req, res) {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Name, email, and password are all required." });
@@ -38,6 +46,8 @@ async function signup(req, res) {
     if (password.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters." });
     }
+
+    const safeRole = VALID_ROLES.includes(role) ? role : "STUDENT";
 
     const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (existing) {
@@ -51,6 +61,7 @@ async function signup(req, res) {
         name,
         email: email.toLowerCase(),
         passwordHash,
+        role: safeRole,
       },
     });
 
@@ -75,8 +86,6 @@ async function login(req, res) {
 
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) {
-      // Same generic message for "no user" and "wrong password" —
-      // don't leak which emails are registered.
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
@@ -101,7 +110,7 @@ async function logout(req, res) {
   return res.json({ message: "Logged out successfully." });
 }
 
-// GET /api/auth/me  (requires requireAuth middleware)
+// GET /api/auth/me
 async function me(req, res) {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.userId } });

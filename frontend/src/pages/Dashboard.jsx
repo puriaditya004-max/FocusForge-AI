@@ -6,19 +6,7 @@ import StatCard from "../components/StatCard";
 import CurrentTask from "../components/CurrentTask";
 import FocusTracker from "../components/FocusTracker";
 import { Clock, CheckCircle2, Star } from "lucide-react";
-
-// ---------------------------------------------
-// Dashboard Page
-// Main landing screen after login.
-// Shows: stats row, smart timetable preview,
-// current task panel, focus camera card.
-//
-// Stats + Current Task now come from /api/dashboard
-// (real data). Smart Timetable preview stays static
-// (same as Timetable.jsx's "Daily Schedule" tab —
-// it's a fixed daily routine, not per-user DB data).
-// FocusTracker is untouched (handles its own camera).
-// ---------------------------------------------
+import { buildSpokenGreeting, speak } from "../utils/voice";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -32,7 +20,6 @@ const timetableData = [
   { time: "12:00 PM", title: "Lunch & Rest", status: "upcoming" },
 ];
 
-// Converts seconds -> "05h 20m" style string
 function formatStudyTime(totalSeconds) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -62,6 +49,12 @@ export default function Dashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load dashboard.");
       setDashboardData(data);
+
+      const alreadyGreeted = sessionStorage.getItem("forge_ai_greeted");
+      if (!alreadyGreeted && data?.user?.name) {
+        sessionStorage.setItem("forge_ai_greeted", "1");
+        speak(buildSpokenGreeting(data.user.name));
+      }
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
@@ -122,7 +115,6 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-6 mt-4">
-              {/* Smart Timetable (static preview, same as before) */}
               <section className="lg:col-span-1 bg-[#13131f] rounded-2xl p-4 border border-white/5">
                 <h2 className="font-semibold mb-3">Smart Timetable</h2>
                 <ul className="space-y-3">
@@ -166,7 +158,6 @@ export default function Dashboard() {
                 </button>
               </section>
 
-              {/* Current Task — real data, or empty state */}
               <section className="lg:col-span-1 bg-[#13131f] rounded-2xl p-4 border border-white/5">
                 {currentTask ? (
                   <CurrentTask
@@ -194,7 +185,6 @@ export default function Dashboard() {
                 )}
               </section>
 
-              {/* Focus Mode camera — untouched */}
               <section className="lg:col-span-1 bg-[#13131f] rounded-2xl p-4 border border-white/5">
                 <FocusTracker />
               </section>

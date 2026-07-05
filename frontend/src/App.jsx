@@ -18,19 +18,11 @@ import Rewards from "./pages/Rewards";
 import CertificateExam from "./pages/CertificateExam";
 import Penalties from "./pages/Penalties";
 import Settings from "./pages/Settings";
-
-// ---------------------------------------------------------
-// App.jsx
-// Root component. Sets up all page routes here.
-//
-// AuthProvider wraps everything so any page can call useAuth().
-// Every real app page is wrapped in <ProtectedRoute> so it's
-// only visible to logged-in users — if not logged in, they get
-// redirected to /login automatically.
-//
-// As we build more pages, just add a new <Route> line below
-// (wrapped in ProtectedRoute) pointing to the new page component.
-// ---------------------------------------------------------
+import ParentDashboard from "./pages/ParentDashboard";
+import TeacherDashboard from "./pages/TeacherDashboard";
+import ClassesMarketplace from "./pages/ClassesMarketplace";
+import QuizGenerator from "./pages/QuizGenerator";
+import HeyForgeWidget from "./components/HeyForgeWidget";
 
 export default function App() {
   return (
@@ -41,11 +33,45 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
-          {/* Protected routes — must be logged in */}
+          {/* Role-specific dashboards */}
+          <Route
+            path="/parent-dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["PARENT"]}>
+                <ParentDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher-dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["TEACHER"]}>
+                <TeacherDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Student-only protected routes */}
+          <Route
+            path="/quiz"
+            element={
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
+                <QuizGenerator />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/classes"
+            element={
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
+                <ClassesMarketplace />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/settings"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Settings />
               </ProtectedRoute>
             }
@@ -53,7 +79,7 @@ export default function App() {
           <Route
             path="/penalties"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Penalties />
               </ProtectedRoute>
             }
@@ -61,7 +87,7 @@ export default function App() {
           <Route
             path="/certificate-exam"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <CertificateExam />
               </ProtectedRoute>
             }
@@ -69,7 +95,7 @@ export default function App() {
           <Route
             path="/rewards"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Rewards />
               </ProtectedRoute>
             }
@@ -77,7 +103,7 @@ export default function App() {
           <Route
             path="/youtube"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <YoutubeSuggestions />
               </ProtectedRoute>
             }
@@ -85,7 +111,7 @@ export default function App() {
           <Route
             path="/ai-mentor"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <AiMentor />
               </ProtectedRoute>
             }
@@ -93,7 +119,7 @@ export default function App() {
           <Route
             path="/progress"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Progress />
               </ProtectedRoute>
             }
@@ -101,7 +127,7 @@ export default function App() {
           <Route
             path="/focus-mode"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <FocusMode />
               </ProtectedRoute>
             }
@@ -109,7 +135,7 @@ export default function App() {
           <Route
             path="/study-room"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <StudyRoom />
               </ProtectedRoute>
             }
@@ -117,7 +143,7 @@ export default function App() {
           <Route
             path="/todays-plan"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <TodaysPlan />
               </ProtectedRoute>
             }
@@ -125,7 +151,7 @@ export default function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Dashboard />
               </ProtectedRoute>
             }
@@ -133,16 +159,20 @@ export default function App() {
           <Route
             path="/timetable"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Timetable />
               </ProtectedRoute>
             }
           />
 
-          {/* Root path redirects to dashboard (ProtectedRoute there will
-              bounce to /login automatically if not logged in) */}
+          {/* Root path — send logged-in users to their own home;
+              ProtectedRoute+allowedRoles below bounces correctly */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+
+        {/* Global "Hey Forge" floating voice widget — renders itself
+            only for logged-in STUDENT users, on every page above */}
+        <HeyForgeWidget />
       </AuthProvider>
     </BrowserRouter>
   );

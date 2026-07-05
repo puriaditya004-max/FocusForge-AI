@@ -5,8 +5,17 @@ import { Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 
 // ---------------------------------------------------------
 // Login Page — same dark/purple theme as the rest of the app.
-// On success, redirects to /dashboard.
+// On success, redirects based on the logged-in user's role:
+//   STUDENT -> /dashboard
+//   PARENT  -> /parent-dashboard
+//   TEACHER -> /teacher-dashboard
 // ---------------------------------------------------------
+
+const ROLE_HOME = {
+  STUDENT: "/dashboard",
+  PARENT: "/parent-dashboard",
+  TEACHER: "/teacher-dashboard",
+};
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -29,8 +38,8 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/dashboard");
+      const user = await login(email, password);
+      navigate(ROLE_HOME[user.role] || "/dashboard");
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
     } finally {
@@ -41,7 +50,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#0b0b14] text-gray-100 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        {/* Logo / Header */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center font-bold text-white text-lg mx-auto mb-3">
             F
@@ -50,7 +58,6 @@ export default function Login() {
           <p className="text-xs text-gray-500 mt-1">Discipline Today, Freedom Tomorrow</p>
         </div>
 
-        {/* Card */}
         <div className="bg-[#13131f] rounded-2xl border border-white/5 p-6">
           <h2 className="text-sm font-semibold mb-1">Welcome back</h2>
           <p className="text-xs text-gray-500 mb-5">Log in to continue your journey.</p>

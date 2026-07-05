@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FocusForge AI</string>
+    <string name="title_activity_main">FocusForge AI</string>
+    <string name="package_name">com.focusforge.ai</string>
+    <string name="custom_url_scheme">com.focusforge.ai</string>
+</resources>

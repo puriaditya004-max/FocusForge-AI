@@ -1,0 +1,39 @@
+{
+  "name": "focusforge-ai-desktop",
+  "version": "1.0.0",
+  "description": "FocusForge AI — Desktop app (Windows / Mac / Linux)",
+  "main": "main.js",
+  "author": "FocusForge AI",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder -mwl"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.focusforge.ai",
+    "productName": "FocusForge AI",
+    "directories": { "output": "release" },
+    "files": ["main.js", "icon.png", "../../frontend/dist/**/*"],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "appx", "arch": ["x64"] }
+      ]
+    },
+    "appx": {
+      "applicationId": "FocusForgeAI",
+      "identityName": "FocusForgeAI",
+      "publisher": "CN=YOUR_PUBLISHER_ID_FROM_PARTNER_CENTER",
+      "publisherDisplayName": "FocusForge AI"
+    },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
+    "mac": { "target": ["dmg"] },
+    "linux": { "target": ["AppImage"] }
+  }
+}

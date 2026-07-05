@@ -6,9 +6,11 @@
 // Focus Mode, Progress, AI Mentor, YouTube Suggestions,
 // Rewards + Certificate Exam, Penalties, Settings.
 //
-// Parent Panel tables are included now (StudentParentLink)
-// so the frontend-first approach doesn't require a schema
-// rewrite later — but no Parent UI is built yet, as agreed.
+// Role-based panels:
+//   STUDENT -> Dashboard (default)
+//   PARENT  -> Parent Dashboard (StudentParentLink)
+//   TEACHER -> Teacher Dashboard (Course + Enrollment)
+// Same login/app — role decides which dashboard loads.
 // ===========================================================
 
 generator client {
@@ -27,6 +29,7 @@ datasource db {
 enum Role {
   STUDENT
   PARENT
+  TEACHER
 }
 
 model User {
@@ -86,9 +89,16 @@ model User {
   roomsCreated       Room[]             @relation("RoomsCreated")
   roomMemberships    RoomMember[]
 
-  // Parent-Student linking (future Parent Panel)
+  // Parent-Student linking (Parent Panel)
   parentLinksAsStudent StudentParentLink[] @relation("StudentLinks")
   parentLinksAsParent  StudentParentLink[] @relation("ParentLinks")
+
+  // Teacher Panel — real courses + enrollments
+  teacherCourses      Course[]     @relation("TeacherCourses")
+  studentEnrollments  Enrollment[] @relation("StudentEnrollments")
+
+  // Quiz Generator — real quiz attempts
+  quizAttempts        QuizAttempt[]
 
   @@map("users")
 }
@@ -105,7 +115,7 @@ enum Theme {
 }
 
 // ---------------------------------------------------------
-// PARENT PANEL (schema-ready, UI not built yet)
+// PARENT PANEL
 // ---------------------------------------------------------
 
 model StudentParentLink {
@@ -124,6 +134,46 @@ model StudentParentLink {
   @@map("student_parent_links")
 }
 
+// ---------------------------------------------------------
+// TEACHER PANEL — real courses + enrollments (no dummy data)
+// ---------------------------------------------------------
+
+model Course {
+  id          String   @id @default(cuid())
+  teacherId   String
+  title       String
+  description String?
+  price       Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id])
+  enrollments Enrollment[]
+
+  @@map("courses")
+}
+
+enum EnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Enrollment {
+  id            String            @id @default(cuid())
+  studentId     String
+  courseId      String
+  enrolledAt    DateTime          @default(now())
+  progress      Int               @default(0)
+  status        EnrollmentStatus  @default(PENDING)
+  contactNumber String @default("")
+  respondedAt   DateTime?
+
+  student User   @relation("StudentEnrollments", fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
+}
 // ---------------------------------------------------------
 // TODAY'S PLAN
 // ---------------------------------------------------------
@@ -410,4 +460,21 @@ model SavedVideo {
   user User @relation(fields: [userId], references: [id])
 
   @@map("saved_videos")
+}
+
+// ---------------------------------------------------------
+// QUIZ GENERATOR (AI-generated, real attempts tracked)
+// ---------------------------------------------------------
+model QuizAttempt {
+  id            String   @id @default(cuid())
+  userId        String
+  topic         String
+  correctCount  Int
+  totalQuestions Int
+  scorePercent  Int
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("quiz_attempts")
 }

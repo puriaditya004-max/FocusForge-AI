@@ -5,6 +5,9 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 // Wrap the whole app with <AuthProvider> (done in App.jsx),
 // then any page/component can call useAuth() to get:
 //   { user, loading, login, signup, logout, isAuthenticated }
+//
+// signup() now takes an optional `role` param:
+//   "STUDENT" (default) | "PARENT" | "TEACHER"
 // ---------------------------------------------------------
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -15,8 +18,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true); // true while we check if already logged in
 
-  // On first load, ask the backend "am I still logged in?"
-  // (the httpOnly cookie is sent automatically if it exists)
   useEffect(() => {
     checkAuth();
   }, []);
@@ -24,7 +25,7 @@ export function AuthProvider({ children }) {
   async function checkAuth() {
     try {
       const res = await fetch(`${API_BASE}/auth/me`, {
-        credentials: "include", // sends the httpOnly cookie
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -39,12 +40,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function signup(name, email, password) {
+  async function signup(name, email, password, role = "STUDENT") {
     const res = await fetch(`${API_BASE}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, role }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -89,7 +90,6 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Shortcut hook — use this in any component instead of useContext(AuthContext)
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) {

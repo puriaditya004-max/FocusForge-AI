@@ -1,22 +1,29 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "./AuthContext";
 
 // ---------------------------------------------------------
 // ProtectedRoute — wraps any page that should only be visible
 // to logged-in users. If not logged in, redirects to /login.
-// While we're still checking (page refresh, cookie check),
-// shows a simple loading screen instead of flashing the login
-// page for a split second.
 //
-// Usage in App.jsx:
-//   <Route path="/dashboard" element={
-//     <ProtectedRoute><Dashboard /></ProtectedRoute>
-//   } />
+// Now also supports `allowedRoles` — e.g. a Parent Dashboard
+// route should only be visible to PARENT users. If a STUDENT
+// tries to visit /parent-dashboard directly by URL, they get
+// bounced to their own correct home instead.
+//
+// Usage:
+//   <ProtectedRoute><Dashboard /></ProtectedRoute>
+//   <ProtectedRoute allowedRoles={["PARENT"]}><ParentDashboard /></ProtectedRoute>
 // ---------------------------------------------------------
 
-export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+const ROLE_HOME = {
+  STUDENT: "/dashboard",
+  PARENT: "/parent-dashboard",
+  TEACHER: "/teacher-dashboard",
+};
+
+export default function ProtectedRoute({ children, allowedRoles }) {
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -31,6 +38,10 @@ export default function ProtectedRoute({ children }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    return <Navigate to={ROLE_HOME[user?.role] || "/dashboard"} replace />;
   }
 
   return children;

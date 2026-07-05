@@ -1,16 +1,9 @@
-// ---------------------------------------------------------
-// routes/index.js — combines all feature routers.
-// As we build each feature (tasks, roadmap, rewards, etc.)
-// we register its router here with one line, same pattern
-// as auth below.
-// ---------------------------------------------------------
 const express = require("express");
 const router = express.Router();
 
 const authRoutes = require("./auth.routes");
 router.use("/auth", authRoutes);
 
-// Coming next (uncomment as each one is built):
 router.use("/tasks", require("./task.routes"));
 router.use("/roadmap", require("./roadmap.routes"));
 router.use("/focus", require("./focus.routes"));
@@ -24,5 +17,8 @@ router.use("/dashboard", require("./dashboard.routes"));
 router.use("/studyroom", require("./studyroom.routes"));
 router.use("/progress", require("./progress.routes"));
 router.use("/mentor", require("./mentor.routes"));
+router.use("/parent", require("./parent.routes"));
+router.use("/marketplace", require("./marketplace.routes"));
+router.use("/teacher", require("./teacher.routes"));
 
 module.exports = router;

@@ -18,7 +18,7 @@ app.use(
     credentials: true, // allow cookies to be sent from the frontend
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "10mb" })); // images/PDFs come in as base64, need a higher limit
 app.use(cookieParser());
 
 // --- Health check (useful for Railway/Render deployment checks) ---
