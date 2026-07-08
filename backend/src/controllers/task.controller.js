@@ -30,19 +30,36 @@ const formatTask = (task) => ({
   })),
 });
 
-// GET /api/tasks
-// Returns all tasks belonging to the logged-in user
+// GET /api/tasks?page=1&limit=20
+// Returns a page of tasks belonging to the logged-in user
 const getTasks = async (req, res) => {
   try {
     const userId = req.user.userId; // set by requireAuth middleware
 
-    const tasks = await prisma.task.findMany({
-      where: { userId },
-      include: { subtasks: true },
-      orderBy: { createdAt: "asc" },
-    });
+    // Pagination params — sane defaults + hard cap so a bad
+    // query string (?limit=999999) can't force one huge query.
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const skip = (page - 1) * limit;
 
-    res.status(200).json(tasks.map(formatTask));
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where: { userId },
+        include: { subtasks: true },
+        orderBy: { createdAt: "asc" },
+        skip,
+        take: limit,
+      }),
+      prisma.task.count({ where: { userId } }),
+    ]);
+
+    res.status(200).json({
+      results: tasks.map(formatTask),
+      page,
+      limit,
+      total,
+      totalPages: Math.max(Math.ceil(total / limit), 1),
+    });
   } catch (err) {
     console.error("getTasks error:", err);
     res.status(500).json({ message: "Failed to fetch tasks" });

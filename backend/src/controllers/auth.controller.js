@@ -7,6 +7,11 @@
 // This is what powers role-based dashboards — the same
 // login page/app, but each role lands on a different home
 // screen after logging in.
+//
+// NOTE: name/email/password/role are already validated and
+// trimmed/lowercased by the zod schema + validate middleware
+// upstream (see validators/auth.validator.js), so this file
+// only needs to worry about business logic, not input shape.
 // ---------------------------------------------------------
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -39,27 +44,21 @@ function toSafeUser(user) {
 async function signup(req, res) {
   try {
     const { name, email, password, role } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "Name, email, and password are all required." });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters." });
-    }
-
     const safeRole = VALID_ROLES.includes(role) ? role : "STUDENT";
 
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      return res.status(409).json({ error: "An account with this email already exists." });
+      // Deliberately generic — doesn't confirm/deny which part
+      // of an existing account matched, just that signup can't proceed.
+      return res.status(409).json({ error: "This email can't be used to create an account." });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12); // cost factor 12 — stronger than the old default of 10
 
     const user = await prisma.user.create({
       data: {
         name,
-        email: email.toLowerCase(),
+        email,
         passwordHash,
         role: safeRole,
       },
@@ -80,19 +79,16 @@ async function login(req, res) {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required." });
-    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Same generic message whether the email doesn't exist OR the
+    // password is wrong — prevents attackers from using this endpoint
+    // to discover which emails have accounts (user enumeration).
+    const genericError = () => res.status(401).json({ error: "Invalid email or password." });
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user) {
-      return res.status(401).json({ error: "Invalid email or password." });
-    }
+    if (!user) return genericError();
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid email or password." });
-    }
+    if (!isMatch) return genericError();
 
     const token = signToken(user);
     res.cookie("token", token, COOKIE_OPTIONS);

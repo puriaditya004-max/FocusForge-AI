@@ -3,6 +3,8 @@
 // ---------------------------------------------------------
 const express = require("express");
 const { requireAuth } = require("../middleware/auth.middleware");
+const validate = require("../middleware/validate.middleware");
+const { createTaskSchema } = require("../validators/task.validator");
 const {
   getTasks,
   createTask,
@@ -17,7 +19,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get("/", getTasks);
-router.post("/", createTask);
+router.post("/", validate(createTaskSchema), createTask);
 router.patch("/:id/toggle", toggleTask);
 router.patch("/:taskId/subtasks/:subId/toggle", toggleSubtask);
 router.delete("/:id", deleteTask);

@@ -133,29 +133,54 @@ const joinRoom = async (req, res) => {
 };
 
 // ---------------------------------------------------------
-// GET /api/studyroom/rooms/:roomId/messages
-// Loads chat history for a room (Socket.io handles new
-// messages live; this is just the initial load).
+// GET /api/studyroom/rooms/:roomId/messages?page=1&limit=50
+//
+// Pagination strategy: page 1 = the MOST RECENT `limit`
+// messages (what you want when a student first opens a room).
+// page 2+ = older messages before that, for a "load older
+// messages" scroll-up button.
+//
+// We fetch newest-first from the DB (so skip/take lines up
+// with "page 1 = most recent"), then reverse in memory so the
+// array is still oldest -> newest, same order the frontend
+// already expects for rendering top-to-bottom.
 // ---------------------------------------------------------
 const getRoomMessages = async (req, res) => {
   try {
     const { roomId } = req.params;
 
-    const messages = await prisma.studyRoomMessage.findMany({
-      where: { roomId },
-      orderBy: { createdAt: "asc" },
-      include: { user: { select: { name: true } } },
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const [messages, total] = await Promise.all([
+      prisma.studyRoomMessage.findMany({
+        where: { roomId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: { user: { select: { name: true } } },
+      }),
+      prisma.studyRoomMessage.count({ where: { roomId } }),
+    ]);
+
+    const formatted = messages
+      .map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        userName: m.user.name,
+        message: m.message,
+        time: m.createdAt,
+      }))
+      .reverse(); // back to oldest -> newest for display
+
+    return res.status(200).json({
+      results: formatted,
+      page,
+      limit,
+      total,
+      hasMore: skip + messages.length < total,
     });
-
-    const formatted = messages.map((m) => ({
-      id: m.id,
-      userId: m.userId,
-      userName: m.user.name,
-      message: m.message,
-      time: m.createdAt,
-    }));
-
-    return res.status(200).json({ results: formatted });
   } catch (err) {
     console.error("getRoomMessages error:", err);
     return res.status(500).json({ error: "Failed to load messages" });
