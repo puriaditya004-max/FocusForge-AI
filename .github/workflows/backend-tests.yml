@@ -1,0 +1,38 @@
+name: Backend Tests
+
+# Runs on every push to main, and on every Pull Request targeting main.
+# If tests fail, you'll see a red ❌ directly on GitHub — on the commit,
+# and on the PR if one is open — before anything ever reaches production.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Jest test suite
+    runs-on: ubuntu-latest
+
+    # All commands below run inside the backend/ folder, since that's
+    # where package.json, node_modules, and the tests/ folder live.
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
