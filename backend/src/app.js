@@ -5,7 +5,7 @@
 //
 // SECURITY LAYERS (in order they run on every request):
 //   1. helmet          → sets safe HTTP security headers
-//   2. cors            → only our real frontend origin allowed
+//   2. cors            → only our real frontend origins allowed
 //   3. express.json    → body parsing (size-limited)
 //   4. cookieParser     → reads httpOnly auth cookie
 //   5. hpp             → blocks HTTP param pollution (?role=STUDENT&role=TEACHER tricks)
@@ -17,11 +17,9 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const hpp = require("hpp");
-
 const routes = require("./routes");
 const sanitizeInputs = require("./middleware/sanitize.middleware");
 const { apiLimiter } = require("./middleware/rateLimiter.middleware");
-
 const app = express();
 
 // --- Security headers (CSP, no-sniff, frameguard, etc.) ---
@@ -30,10 +28,33 @@ app.use(helmet());
 // easily fingerprint the framework/version we're running.
 app.disable("x-powered-by");
 
+// --- Allowed origins ---
+// Requests now come from 4 different places:
+//  1. The deployed Vercel frontend (CLIENT_URL env var)
+//  2. Local dev (npm run dev on your laptop)
+//  3. The Capacitor Android app — serves its content from the
+//     fixed origin "https://localhost" (set by androidScheme:
+//     "https" in capacitor.config.ts)
+//  4. A Capacitor iOS app, if/when built — uses "capacitor://localhost"
+const allowedOrigins = [
+  process.env.CLIENT_URL,        // e.g. https://focus-forge-ai-woad.vercel.app
+  "http://localhost:5173",       // local frontend dev server
+  "https://localhost",           // Capacitor Android app
+  "capacitor://localhost",       // Capacitor iOS app
+].filter(Boolean);
+
 // --- Core middleware ---
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: function (origin, callback) {
+      // requests with no origin (like Postman, curl, health checks) are allowed
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn("Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true, // allow cookies to be sent from the frontend
   })
 );

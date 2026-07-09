@@ -50,14 +50,19 @@ export default function TodaysPlan() {
   async function fetchTasks() {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/tasks`, {
+      // limit=100 covers a full day's tasks in one call; if you ever
+      // expect more than that per day, this is where a "load more" /
+      // page control would plug in using data.page / data.totalPages.
+      const res = await fetch(`${API_BASE}/tasks?limit=100`, {
         credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || data.error || "Failed to load tasks");
       }
-      setTasks(data);
+      // Backend now returns { results, page, limit, total, totalPages }
+      // instead of a bare array — pull the array out of `results`.
+      setTasks(data.results || []);
       setError("");
     } catch (err) {
       setError(err.message || "Failed to load tasks");
