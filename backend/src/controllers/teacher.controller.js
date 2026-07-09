@@ -8,6 +8,7 @@
 // ---------------------------------------------------------
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // GET /api/teacher/overview
 async function getOverview(req, res) {
@@ -51,7 +52,7 @@ async function getOverview(req, res) {
       courses: courseSummaries,
     });
   } catch (err) {
-    console.error("Teacher getOverview error:", err);
+    logger.error("Teacher getOverview error:", err);
     return res.status(500).json({ error: "Failed to load teacher overview." });
   }
 }
@@ -77,7 +78,7 @@ async function createCourse(req, res) {
 
     return res.status(201).json({ course });
   } catch (err) {
-    console.error("Teacher createCourse error:", err);
+    logger.error("Teacher createCourse error:", err);
     return res.status(500).json({ error: "Failed to create course." });
   }
 }
@@ -114,7 +115,7 @@ async function getEnrollmentRequests(req, res) {
 
     return res.json({ requests: results });
   } catch (err) {
-    console.error("Teacher getEnrollmentRequests error:", err);
+    logger.error("Teacher getEnrollmentRequests error:", err);
     return res.status(500).json({ error: "Failed to load enrollment requests." });
   }
 }
@@ -150,7 +151,7 @@ async function respondToRequest(req, res) {
 
     return res.json({ message: `Request ${action === "approve" ? "approved" : "rejected"}.`, enrollment: updated });
   } catch (err) {
-    console.error("Teacher respondToRequest error:", err);
+    logger.error("Teacher respondToRequest error:", err);
     return res.status(500).json({ error: "Failed to respond to enrollment request." });
   }
 }

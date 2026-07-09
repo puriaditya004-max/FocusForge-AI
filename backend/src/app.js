@@ -20,6 +20,7 @@ const hpp = require("hpp");
 const routes = require("./routes");
 const sanitizeInputs = require("./middleware/sanitize.middleware");
 const { apiLimiter } = require("./middleware/rateLimiter.middleware");
+const logger = require("./utils/logger");
 const app = express();
 
 // --- Security headers (CSP, no-sniff, frameguard, etc.) ---
@@ -51,7 +52,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn("Blocked by CORS:", origin);
+        logger.warn("Blocked by CORS:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -85,7 +86,7 @@ app.use((req, res) => {
 
 // --- Global error handler (catches anything thrown/next(err)) ---
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
+  logger.error("Unhandled error:", err);
   res.status(err.status || 500).json({
     error: err.message || "Something went wrong on the server.",
   });

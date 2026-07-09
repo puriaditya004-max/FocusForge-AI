@@ -23,6 +23,7 @@
 
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // Simple manual cookie parser — avoids relying on the `cookie` package's
 // export shape, which varies between versions (some are ESM-only in CJS).
@@ -70,7 +71,7 @@ module.exports = function studyRoomSocket(io) {
       socket.userId = decoded.userId; // known gotcha: userId, not id
       next();
     } catch (err) {
-      console.error("Socket auth failed:", err.message);
+      logger.error("Socket auth failed:", err.message);
       next(new Error("Invalid or expired session"));
     }
   });
@@ -105,7 +106,7 @@ module.exports = function studyRoomSocket(io) {
 
         io.to(roomId).emit("online_users", getOnlineList(roomId));
       } catch (err) {
-        console.error("join_room error:", err);
+        logger.error("join_room error:", err);
         socket.emit("error_message", { error: "Could not join room" });
       }
     });
@@ -130,7 +131,7 @@ module.exports = function studyRoomSocket(io) {
           time: saved.createdAt,
         });
       } catch (err) {
-        console.error("send_message error:", err);
+        logger.error("send_message error:", err);
         socket.emit("error_message", { error: "Message could not be sent" });
       }
     });

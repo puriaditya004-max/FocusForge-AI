@@ -16,6 +16,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -69,7 +70,7 @@ async function signup(req, res) {
 
     return res.status(201).json({ user: toSafeUser(user), token });
   } catch (err) {
-    console.error("Signup error:", err);
+    logger.error("Signup error:", err);
     return res.status(500).json({ error: "Something went wrong while creating your account." });
   }
 }
@@ -95,7 +96,7 @@ async function login(req, res) {
 
     return res.json({ user: toSafeUser(user), token });
   } catch (err) {
-    console.error("Login error:", err);
+    logger.error("Login error:", err);
     return res.status(500).json({ error: "Something went wrong while logging in." });
   }
 }
@@ -115,7 +116,7 @@ async function me(req, res) {
     }
     return res.json({ user: toSafeUser(user) });
   } catch (err) {
-    console.error("Me error:", err);
+    logger.error("Me error:", err);
     return res.status(500).json({ error: "Something went wrong." });
   }
 }

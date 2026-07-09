@@ -9,6 +9,7 @@
 // cooldown, certificate) is persisted here.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const MAX_ATTEMPTS = 2;
 const PASS_SCORE = 97;
@@ -75,7 +76,7 @@ const getStatus = async (req, res) => {
     const status = await buildStatus(userId, topic);
     res.status(200).json(status);
   } catch (err) {
-    console.error("getStatus error:", err);
+    logger.error("getStatus error:", err);
     res.status(500).json({ message: "Failed to fetch exam status" });
   }
 };
@@ -136,7 +137,7 @@ const submitExam = async (req, res) => {
     const updatedStatus = await buildStatus(userId, topic);
     res.status(200).json({ ...updatedStatus, score: pct, passed });
   } catch (err) {
-    console.error("submitExam error:", err);
+    logger.error("submitExam error:", err);
     res.status(500).json({ message: "Failed to submit exam" });
   }
 };

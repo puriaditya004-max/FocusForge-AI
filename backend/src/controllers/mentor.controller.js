@@ -53,6 +53,7 @@
 // ===========================================================
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const GEMINI_MODEL = "gemini-2.5-flash"; // gemini-2.0-flash was moved to a 0-quota free tier bucket by Google — use 2.5
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001"; // cheapest Claude model, good fit for BYOK chat
@@ -170,7 +171,7 @@ async function callMentorModel(user, systemPrompt, historyForApi, file) {
     try {
       replyText = await callClaude(user.mentorApiKey, systemPrompt, historyForApi);
     } catch (byokError) {
-      console.error("BYOK Claude key failed, falling back to Gemini:", byokError.message);
+      logger.error("BYOK Claude key failed, falling back to Gemini:", byokError.message);
       usedFallback = true;
       replyText = await callGemini(systemPrompt, historyForApi, null);
     }
@@ -322,7 +323,7 @@ async function sendMessage(req, res) {
       time: savedReply.createdAt,
     });
   } catch (error) {
-    console.error("AI Mentor sendMessage error:", error);
+    logger.error("AI Mentor sendMessage error:", error);
     return res.status(500).json({ error: "Mentor is unavailable right now, please try again." });
   }
 }
@@ -345,7 +346,7 @@ async function getHistory(req, res) {
     }));
     return res.status(200).json({ results: formatted });
   } catch (error) {
-    console.error("AI Mentor getHistory error:", error);
+    logger.error("AI Mentor getHistory error:", error);
     return res.status(500).json({ error: "Could not load chat history" });
   }
 }
@@ -435,7 +436,7 @@ async function getRecommendations(req, res) {
 
     return res.status(200).json({ results: insights });
   } catch (error) {
-    console.error("AI Mentor getRecommendations error:", error);
+    logger.error("AI Mentor getRecommendations error:", error);
     return res.status(500).json({ error: "Could not load recommendations" });
   }
 }
@@ -549,7 +550,7 @@ async function handleVoiceCommand(req, res) {
       tasksCreated,
     });
   } catch (error) {
-    console.error("Forge voice command error:", error);
+    logger.error("Forge voice command error:", error);
     return res.status(500).json({ error: "Forge couldn't process that, please try again." });
   }
 }
@@ -648,7 +649,7 @@ async function getWeaknessReport(req, res) {
 
     return res.status(200).json({ hasData: true, weakTopics, strongTopics });
   } catch (error) {
-    console.error("AI Mentor getWeaknessReport error:", error);
+    logger.error("AI Mentor getWeaknessReport error:", error);
     return res.status(500).json({ error: "Could not analyze weaknesses right now." });
   }
 }
@@ -711,7 +712,7 @@ Each question must have exactly 4 options and exactly one correct answer. Never 
 
     return res.status(200).json({ topic: topic.trim(), questions: parsed.questions });
   } catch (error) {
-    console.error("Quiz generateQuiz error:", error);
+    logger.error("Quiz generateQuiz error:", error);
     return res.status(500).json({ error: "Could not generate quiz right now." });
   }
 }
@@ -745,7 +746,7 @@ async function submitQuizAttempt(req, res) {
 
     return res.status(201).json({ attempt });
   } catch (error) {
-    console.error("Quiz submitQuizAttempt error:", error);
+    logger.error("Quiz submitQuizAttempt error:", error);
     return res.status(500).json({ error: "Could not save quiz result." });
   }
 }

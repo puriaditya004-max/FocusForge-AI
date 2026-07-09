@@ -4,6 +4,7 @@
 // RoadmapItem tables into chart-ready shapes.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const SUBJECT_COLORS = {
   "Python": "#a855f7",
@@ -134,7 +135,7 @@ const getStats = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getStats error:", err);
+    logger.error("getStats error:", err);
     res.status(500).json({ message: "Failed to fetch progress stats" });
   }
 };

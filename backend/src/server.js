@@ -8,6 +8,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const app = require("./app");
 const studyRoomSocket = require("./sockets/studyroom.socket");
+const logger = require("./utils/logger");
 
 const PORT = process.env.PORT || 5000;
 
@@ -32,5 +33,5 @@ const io = new Server(httpServer, {
 studyRoomSocket(io);
 
 httpServer.listen(PORT, () => {
-  console.log(`✅ FocusForge AI backend running on http://localhost:${PORT}`);
+  logger.info(`✅ FocusForge AI backend running on http://localhost:${PORT}`);
 });

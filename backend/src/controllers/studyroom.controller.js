@@ -9,6 +9,7 @@
 // ===========================================================
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // ---------------------------------------------------------
 // GET /api/studyroom/rooms
@@ -57,7 +58,7 @@ const listRooms = async (req, res) => {
 
     return res.status(200).json({ results: rooms });
   } catch (err) {
-    console.error("listRooms error:", err);
+    logger.error("listRooms error:", err);
     return res.status(500).json({ error: "Failed to load rooms" });
   }
 };
@@ -99,7 +100,7 @@ const createRoom = async (req, res) => {
       memberCount: 1,
     });
   } catch (err) {
-    console.error("createRoom error:", err);
+    logger.error("createRoom error:", err);
     return res.status(500).json({ error: "Failed to create room" });
   }
 };
@@ -127,7 +128,7 @@ const joinRoom = async (req, res) => {
 
     return res.status(200).json({ message: "Joined room", roomId });
   } catch (err) {
-    console.error("joinRoom error:", err);
+    logger.error("joinRoom error:", err);
     return res.status(500).json({ error: "Failed to join room" });
   }
 };
@@ -182,7 +183,7 @@ const getRoomMessages = async (req, res) => {
       hasMore: skip + messages.length < total,
     });
   } catch (err) {
-    console.error("getRoomMessages error:", err);
+    logger.error("getRoomMessages error:", err);
     return res.status(500).json({ error: "Failed to load messages" });
   }
 };

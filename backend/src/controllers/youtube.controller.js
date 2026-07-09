@@ -5,6 +5,8 @@
 // catalog — this is purely for real-time search results.
 // ---------------------------------------------------------
 
+const logger = require("../utils/logger");
+
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
 async function searchYoutube(req, res) {
@@ -27,7 +29,7 @@ async function searchYoutube(req, res) {
     const data = await response.json();
 
     if (data.error) {
-      console.error("YouTube API error:", data.error);
+      logger.error("YouTube API error:", data.error);
       return res.status(500).json({ error: "YouTube API request failed." });
     }
 
@@ -41,7 +43,7 @@ async function searchYoutube(req, res) {
 
     res.json({ results });
   } catch (err) {
-    console.error("searchYoutube error:", err);
+    logger.error("searchYoutube error:", err);
     res.status(500).json({ error: "Something went wrong while searching YouTube." });
   }
 }

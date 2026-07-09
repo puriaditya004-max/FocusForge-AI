@@ -7,6 +7,7 @@
 // sync.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const XP_PER_LEVEL = 500;
 
@@ -203,7 +204,7 @@ const getRewards = async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error("getRewards error:", err);
+    logger.error("getRewards error:", err);
     res.status(500).json({ message: "Failed to fetch rewards" });
   }
 };
@@ -236,7 +237,7 @@ const toggleChallenge = async (req, res) => {
       done: updated.done,
     });
   } catch (err) {
-    console.error("toggleChallenge error:", err);
+    logger.error("toggleChallenge error:", err);
     res.status(500).json({ message: "Failed to update challenge" });
   }
 };

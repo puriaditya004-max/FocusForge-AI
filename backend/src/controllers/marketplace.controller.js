@@ -10,6 +10,7 @@
 // ---------------------------------------------------------
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // GET /api/marketplace/courses
 async function browseCourses(req, res) {
@@ -42,7 +43,7 @@ async function browseCourses(req, res) {
 
     return res.json({ courses: results });
   } catch (err) {
-    console.error("Marketplace browseCourses error:", err);
+    logger.error("Marketplace browseCourses error:", err);
     return res.status(500).json({ error: "Failed to load courses." });
   }
 }
@@ -93,7 +94,7 @@ async function enrollInCourse(req, res) {
       enrollment,
     });
   } catch (err) {
-    console.error("Marketplace enrollInCourse error:", err);
+    logger.error("Marketplace enrollInCourse error:", err);
     return res.status(500).json({ error: "Failed to submit enrollment request." });
   }
 }
@@ -123,7 +124,7 @@ async function getMyCourses(req, res) {
 
     return res.json({ courses: results });
   } catch (err) {
-    console.error("Marketplace getMyCourses error:", err);
+    logger.error("Marketplace getMyCourses error:", err);
     return res.status(500).json({ error: "Failed to load your courses." });
   }
 }

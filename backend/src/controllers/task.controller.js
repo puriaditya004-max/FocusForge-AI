@@ -2,6 +2,7 @@
 // task.controller.js — CRUD logic for Today's Plan tasks
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // Helper: convert frontend priority ("High","Medium","Low")
 // to Prisma enum format ("HIGH","MEDIUM","LOW")
@@ -61,7 +62,7 @@ const getTasks = async (req, res) => {
       totalPages: Math.max(Math.ceil(total / limit), 1),
     });
   } catch (err) {
-    console.error("getTasks error:", err);
+    logger.error("getTasks error:", err);
     res.status(500).json({ message: "Failed to fetch tasks" });
   }
 };
@@ -89,7 +90,7 @@ const createTask = async (req, res) => {
 
     res.status(201).json(formatTask(task));
   } catch (err) {
-    console.error("createTask error:", err);
+    logger.error("createTask error:", err);
     res.status(500).json({ message: "Failed to create task" });
   }
 };
@@ -114,7 +115,7 @@ const toggleTask = async (req, res) => {
 
     res.status(200).json(formatTask(task));
   } catch (err) {
-    console.error("toggleTask error:", err);
+    logger.error("toggleTask error:", err);
     res.status(500).json({ message: "Failed to update task" });
   }
 };
@@ -149,7 +150,7 @@ const toggleSubtask = async (req, res) => {
 
     res.status(200).json(formatTask(task));
   } catch (err) {
-    console.error("toggleSubtask error:", err);
+    logger.error("toggleSubtask error:", err);
     res.status(500).json({ message: "Failed to update subtask" });
   }
 };
@@ -170,7 +171,7 @@ const deleteTask = async (req, res) => {
 
     res.status(200).json({ message: "Task deleted", id });
   } catch (err) {
-    console.error("deleteTask error:", err);
+    logger.error("deleteTask error:", err);
     res.status(500).json({ message: "Failed to delete task" });
   }
 };

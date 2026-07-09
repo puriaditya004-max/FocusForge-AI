@@ -8,6 +8,7 @@
 // reading existing penalties and marking them as redeemed.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // Fixed redemption challenges — static data, no DB table needed
 const REDEMPTION_CHALLENGES = [
@@ -68,7 +69,7 @@ const getPenalties = async (req, res) => {
       redemptionChallenges: REDEMPTION_CHALLENGES,
     });
   } catch (err) {
-    console.error("getPenalties error:", err);
+    logger.error("getPenalties error:", err);
     res.status(500).json({ message: "Failed to fetch penalties" });
   }
 };
@@ -91,7 +92,7 @@ const markRedeemed = async (req, res) => {
 
     res.status(200).json(formatEvent(updated));
   } catch (err) {
-    console.error("markRedeemed error:", err);
+    logger.error("markRedeemed error:", err);
     res.status(500).json({ message: "Failed to update penalty event" });
   }
 };

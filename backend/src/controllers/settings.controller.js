@@ -8,6 +8,7 @@
 // (falls back to the free shared Gemini tier).
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 const ALLOWED_FIELDS = [
   "name",
@@ -67,7 +68,7 @@ const getSettings = async (req, res) => {
     }
     res.status(200).json(formatUser(user));
   } catch (err) {
-    console.error("getSettings error:", err);
+    logger.error("getSettings error:", err);
     res.status(500).json({ message: "Failed to fetch settings" });
   }
 };
@@ -95,7 +96,7 @@ const updateSettings = async (req, res) => {
     const updated = await prisma.user.update({ where: { id: userId }, data });
     res.status(200).json(formatUser(updated));
   } catch (err) {
-    console.error("updateSettings error:", err);
+    logger.error("updateSettings error:", err);
     res.status(500).json({ message: "Failed to update settings" });
   }
 };

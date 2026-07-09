@@ -13,6 +13,7 @@
 // doesn't need to change.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // GET /api/saved-videos
 const getSavedVideos = async (req, res) => {
@@ -32,7 +33,7 @@ const getSavedVideos = async (req, res) => {
       }))
     );
   } catch (err) {
-    console.error("getSavedVideos error:", err);
+    logger.error("getSavedVideos error:", err);
     res.status(500).json({ message: "Failed to fetch saved videos" });
   }
 };
@@ -59,7 +60,7 @@ const saveVideo = async (req, res) => {
 
     res.status(201).json({ id: created.id, videoId: created.videoId });
   } catch (err) {
-    console.error("saveVideo error:", err);
+    logger.error("saveVideo error:", err);
     res.status(500).json({ message: "Failed to save video" });
   }
 };
@@ -78,7 +79,7 @@ const unsaveVideo = async (req, res) => {
     await prisma.savedVideo.delete({ where: { id: existing.id } });
     res.status(200).json({ message: "Removed", videoId });
   } catch (err) {
-    console.error("unsaveVideo error:", err);
+    logger.error("unsaveVideo error:", err);
     res.status(500).json({ message: "Failed to remove saved video" });
   }
 };

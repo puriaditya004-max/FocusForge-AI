@@ -5,6 +5,7 @@
 // ---------------------------------------------------------
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 function toDbPriority(p) {
   if (!p) return "MEDIUM";
@@ -117,7 +118,7 @@ async function getDashboard(req, res) {
       },
     });
   } catch (err) {
-    console.error("getDashboard error:", err);
+    logger.error("getDashboard error:", err);
     res.status(500).json({ error: "Failed to load dashboard data." });
   }
 }

@@ -11,6 +11,7 @@
 // ---------------------------------------------------------
 
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 async function getStudentSnapshot(studentId) {
   const startOfDay = new Date();
@@ -81,7 +82,7 @@ async function getOverview(req, res) {
 
     return res.json({ children: children.filter(Boolean), linked: true });
   } catch (err) {
-    console.error("Parent getOverview error:", err);
+    logger.error("Parent getOverview error:", err);
     return res.status(500).json({ error: "Failed to load parent overview." });
   }
 }
@@ -121,7 +122,7 @@ async function linkStudent(req, res) {
 
     return res.status(201).json({ message: `Linked to ${student.name} successfully.` });
   } catch (err) {
-    console.error("Parent linkStudent error:", err);
+    logger.error("Parent linkStudent error:", err);
     return res.status(500).json({ error: "Failed to link student." });
   }
 }

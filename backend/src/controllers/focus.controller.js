@@ -2,6 +2,7 @@
 // focus.controller.js — Focus Mode session tracking
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // Helper: reshape a session from Prisma format -> frontend format
 const formatSession = (session) => ({
@@ -39,7 +40,7 @@ const createSession = async (req, res) => {
 
     res.status(201).json(formatSession(session));
   } catch (err) {
-    console.error("createSession error:", err);
+    logger.error("createSession error:", err);
     res.status(500).json({ message: "Failed to save focus session" });
   }
 };
@@ -57,7 +58,7 @@ const getSessions = async (req, res) => {
 
     res.status(200).json(sessions.map(formatSession));
   } catch (err) {
-    console.error("getSessions error:", err);
+    logger.error("getSessions error:", err);
     res.status(500).json({ message: "Failed to fetch focus sessions" });
   }
 };

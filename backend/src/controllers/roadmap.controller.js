@@ -9,6 +9,7 @@
 // auto-seed all 25 weeks for them (one time only).
 // ---------------------------------------------------------
 const prisma = require("../config/db");
+const logger = require("../utils/logger");
 
 // Master curriculum data — same for every student.
 // This mirrors the `weeklyPlan` array from Timetable.jsx.
@@ -92,7 +93,7 @@ const getRoadmap = async (req, res) => {
 
     res.status(200).json(items.map(formatItem));
   } catch (err) {
-    console.error("getRoadmap error:", err);
+    logger.error("getRoadmap error:", err);
     res.status(500).json({ message: "Failed to fetch roadmap" });
   }
 };
@@ -124,7 +125,7 @@ const updateWeekStatus = async (req, res) => {
 
     res.status(200).json(formatItem(updated));
   } catch (err) {
-    console.error("updateWeekStatus error:", err);
+    logger.error("updateWeekStatus error:", err);
     res.status(500).json({ message: "Failed to update week status" });
   }
 };
