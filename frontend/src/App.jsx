@@ -5,6 +5,8 @@ import ProtectedRoute from "./context/ProtectedRoute";
 
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 
 import Dashboard from "./pages/Dashboard";
 import Timetable from "./pages/Timetable";
@@ -32,6 +34,8 @@ export default function App() {
           {/* Public routes — no login required */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
 
           {/* Role-specific dashboards */}
           <Route

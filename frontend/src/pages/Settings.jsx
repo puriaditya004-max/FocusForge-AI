@@ -142,7 +142,8 @@ export default function Settings() {
   const [accent, setAccent] = useState("purple");
 
   // AI Mentor — BYOK (Bring Your Own Key)
-  const [mentorApiKey, setMentorApiKey] = useState("");
+  const [mentorApiKey, setMentorApiKey] = useState(""); // only ever holds a NEW key being typed — never prefilled
+  const [maskedApiKey, setMaskedApiKey] = useState(""); // masked display of the currently-saved key, e.g. "sk-ant-...4f2a"
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeySaved, setApiKeySaved] = useState(false); // true if backend already has a key stored
 
@@ -186,8 +187,9 @@ export default function Settings() {
       setLevel(data.level);
       setCurrentStreak(data.currentStreak);
       setJoinedDate(data.joinedDate);
-      setMentorApiKey(data.mentorApiKey || "");
-      setApiKeySaved(Boolean(data.mentorApiKey));
+      setMentorApiKey(""); // never prefill — the backend only ever sends a masked value
+      setMaskedApiKey(data.mentorApiKey || "");
+      setApiKeySaved(Boolean(data.hasMentorApiKey));
       setError("");
     } catch (err) {
       setError(err.message || "Failed to load settings");
@@ -212,9 +214,11 @@ export default function Settings() {
       }
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus(""), 1500);
+      return data;
     } catch (err) {
       setError(err.message || "Failed to save settings");
       setSaveStatus("");
+      return null;
     }
   }
 
@@ -226,15 +230,24 @@ export default function Settings() {
     saveSettings({ offDays: updated });
   }
 
-  function handleSaveApiKey() {
-    saveSettings({ mentorApiKey: mentorApiKey.trim() || null });
-    setApiKeySaved(Boolean(mentorApiKey.trim()));
+  async function handleSaveApiKey() {
+    const trimmed = mentorApiKey.trim();
+    if (!trimmed) return; // nothing typed — use the Remove button to clear instead
+    const data = await saveSettings({ mentorApiKey: trimmed });
+    if (data) {
+      setApiKeySaved(Boolean(data.hasMentorApiKey));
+      setMaskedApiKey(data.mentorApiKey || "");
+      setMentorApiKey(""); // clear the typed value now that it's saved server-side
+    }
   }
 
-  function handleRemoveApiKey() {
+  async function handleRemoveApiKey() {
     setMentorApiKey("");
-    saveSettings({ mentorApiKey: null });
-    setApiKeySaved(false);
+    const data = await saveSettings({ mentorApiKey: null });
+    if (data) {
+      setApiKeySaved(false);
+      setMaskedApiKey("");
+    }
   }
 
   function handleExport() {
@@ -752,7 +765,7 @@ export default function Settings() {
                           type={showApiKey ? "text" : "password"}
                           value={mentorApiKey}
                           onChange={(e) => setMentorApiKey(e.target.value)}
-                          placeholder="sk-ant-api03-..."
+                          placeholder={apiKeySaved ? `Saved: ${maskedApiKey} — type to replace` : "sk-ant-api03-..."}
                           className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-gray-100 focus:outline-none focus:border-purple-500/50"
                         />
                         <button
@@ -774,7 +787,7 @@ export default function Settings() {
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] text-gray-500">
                         {apiKeySaved
-                          ? "✅ Custom key active — your mentor chats use your own key."
+                          ? `✅ Custom key active (${maskedApiKey}) — your mentor chats use your own key.`
                           : "No key saved — using the free shared tier."}
                       </p>
                       {apiKeySaved && (

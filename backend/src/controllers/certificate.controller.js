@@ -3,13 +3,15 @@
 // result tracking. Replaces the old localStorage-based
 // attempt state with real backend persistence.
 //
-// Question content and answer-checking stay on the frontend
-// (this is a self-study app, not a high-stakes proctored
-// exam) — only the final result (score, pass/fail, attempts,
-// cooldown, certificate) is persisted here.
+// Question content lives server-side only (data/certificateQuestions.js).
+// GET /questions strips the `answer` field before responding, and
+// POST /submit grades against the real question bank on the server —
+// the client only ever sends its selected option indices, never a
+// score. This is what makes the issued certificate trustworthy.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { CERTIFICATE_QUESTIONS } = require("../data/certificateQuestions");
 
 const MAX_ATTEMPTS = 2;
 const PASS_SCORE = 97;
@@ -65,6 +67,42 @@ async function buildStatus(userId, topic) {
   };
 }
 
+// GET /api/certificate-exam/questions?topic=...
+// Returns the question bank for the topic with the `answer`
+// field stripped — client gets id/type/q/options only, never
+// the correct index.
+const getQuestions = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const topic = req.query.topic;
+    if (!topic) {
+      return res.status(400).json({ message: "topic query param is required" });
+    }
+
+    const bank = CERTIFICATE_QUESTIONS[topic];
+    if (!bank) {
+      return res.status(404).json({ message: "No question bank found for this topic" });
+    }
+
+    const status = await buildStatus(userId, topic);
+    if (status.isLocked) {
+      return res.status(403).json({ message: "No attempts remaining for this certificate" });
+    }
+    if (status.cooldownDaysLeft > 0) {
+      return res.status(403).json({ message: "Still in cooldown period" });
+    }
+    if (status.certEarned) {
+      return res.status(403).json({ message: "Certificate already earned for this topic" });
+    }
+
+    const safeQuestions = bank.map(({ id, type, q, options }) => ({ id, type, q, options }));
+    res.status(200).json({ questions: safeQuestions, totalQuestions: bank.length });
+  } catch (err) {
+    logger.error("getQuestions error:", err);
+    res.status(500).json({ message: "Failed to fetch exam questions" });
+  }
+};
+
 // GET /api/certificate-exam/status?topic=...
 const getStatus = async (req, res) => {
   try {
@@ -82,14 +120,22 @@ const getStatus = async (req, res) => {
 };
 
 // POST /api/certificate-exam/submit
-// body: { topic, correct, totalQuestions, projectsCompleted, startedAt }
+// body: { topic, answers, projectsCompleted, startedAt }
+// `answers` is a map of { [questionId]: selectedOptionIndex } — the
+// client never tells us the score, we compute it here against the
+// real question bank so it can't be spoofed.
 const submitExam = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { topic, correct, totalQuestions, projectsCompleted, startedAt } = req.body;
+    const { topic, answers, projectsCompleted, startedAt } = req.body;
 
-    if (!topic || totalQuestions === undefined || correct === undefined) {
-      return res.status(400).json({ message: "topic, correct, and totalQuestions are required" });
+    if (!topic || !answers || typeof answers !== "object") {
+      return res.status(400).json({ message: "topic and answers are required" });
+    }
+
+    const bank = CERTIFICATE_QUESTIONS[topic];
+    if (!bank) {
+      return res.status(404).json({ message: "No question bank found for this topic" });
     }
 
     const status = await buildStatus(userId, topic);
@@ -103,6 +149,11 @@ const submitExam = async (req, res) => {
       return res.status(403).json({ message: "Certificate already earned for this topic" });
     }
 
+    let correct = 0;
+    for (const question of bank) {
+      if (answers[question.id] === question.answer) correct++;
+    }
+    const totalQuestions = bank.length;
     const pct = Math.round((correct / totalQuestions) * 100);
     const passed = pct >= PASS_SCORE;
     const attemptNumber = status.attemptsUsed + 1;
@@ -135,7 +186,7 @@ const submitExam = async (req, res) => {
     }
 
     const updatedStatus = await buildStatus(userId, topic);
-    res.status(200).json({ ...updatedStatus, score: pct, passed });
+    res.status(200).json({ ...updatedStatus, score: pct, passed, correct, totalQuestions });
   } catch (err) {
     logger.error("submitExam error:", err);
     res.status(500).json({ message: "Failed to submit exam" });
@@ -143,6 +194,7 @@ const submitExam = async (req, res) => {
 };
 
 module.exports = {
+  getQuestions,
   getStatus,
   submitExam,
 };

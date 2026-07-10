@@ -263,7 +263,9 @@ export default function AiMentor() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Mentor request failed (${res.status})`);
+        const err = new Error(errData.error || `Mentor request failed (${res.status})`);
+        err.status = res.status;
+        throw err;
       }
 
       const reply = await res.json();
@@ -276,9 +278,12 @@ export default function AiMentor() {
       if (voiceReplyOn) speak(reply.text);
     } catch (err) {
       console.error("AI Mentor sendMessage error:", err);
-      const failText = err.message?.includes("too large") || err.message?.includes("supported")
-        ? err.message
-        : "Sorry, I couldn't respond right now. Please try again in a moment.";
+      // 429 (rate limit) carries a specific, actionable message from the
+      // server — show it as-is instead of the generic fallback below.
+      const failText =
+        err.status === 429 || err.message?.includes("too large") || err.message?.includes("supported")
+          ? err.message
+          : "Sorry, I couldn't respond right now. Please try again in a moment.";
       setMessages((prev) => [
         ...prev,
         { id: `error-${Date.now()}`, role: "mentor", text: failText, time: formatTime() },

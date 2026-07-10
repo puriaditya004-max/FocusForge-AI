@@ -54,6 +54,7 @@
 
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { decrypt } = require("../utils/crypto");
 
 const GEMINI_MODEL = "gemini-2.5-flash"; // gemini-2.0-flash was moved to a 0-quota free tier bucket by Google — use 2.5
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001"; // cheapest Claude model, good fit for BYOK chat
@@ -168,8 +169,18 @@ async function callMentorModel(user, systemPrompt, historyForApi, file) {
   }
 
   if (user.mentorApiKey) {
+    const plainKey = decrypt(user.mentorApiKey);
+    if (!plainKey) {
+      // Corrupt value or a legacy plaintext key from before encryption
+      // was added — treat it as if no key were saved rather than
+      // crashing or sending garbage to Anthropic.
+      logger.error("mentorApiKey failed to decrypt for user, falling back to Gemini", { userId: user.id });
+      replyText = await callGemini(systemPrompt, historyForApi, null);
+      usedFallback = true;
+      return { text: replyText, usedFallback };
+    }
     try {
-      replyText = await callClaude(user.mentorApiKey, systemPrompt, historyForApi);
+      replyText = await callClaude(plainKey, systemPrompt, historyForApi);
     } catch (byokError) {
       logger.error("BYOK Claude key failed, falling back to Gemini:", byokError.message);
       usedFallback = true;

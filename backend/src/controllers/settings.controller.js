@@ -9,6 +9,7 @@
 // ---------------------------------------------------------
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { encrypt, decrypt, mask } = require("../utils/crypto");
 
 const ALLOWED_FIELDS = [
   "name",
@@ -55,7 +56,11 @@ const formatUser = (user) => ({
   weeklySummaryOn: user.weeklySummaryOn,
   theme: user.theme.toLowerCase(),
   accentColor: user.accentColor,
-  mentorApiKey: user.mentorApiKey || null,
+  // Never send the full key back — mask() shows just enough
+  // (prefix + last 4 chars) for the student to recognize which
+  // key is saved, without exposing it to anyone reading the response.
+  mentorApiKey: user.mentorApiKey ? mask(decrypt(user.mentorApiKey)) : null,
+  hasMentorApiKey: !!user.mentorApiKey,
 });
 
 // GET /api/settings
@@ -83,9 +88,15 @@ const updateSettings = async (req, res) => {
     const data = {};
     for (const key of ALLOWED_FIELDS) {
       if (body[key] !== undefined) {
-        data[key] = ENUM_FIELDS.includes(key)
-          ? String(body[key]).toUpperCase()
-          : body[key];
+        if (key === "mentorApiKey") {
+          // Empty string / null clears the saved key (falls back to
+          // shared Gemini tier); anything else gets encrypted at rest.
+          data[key] = body[key] ? encrypt(body[key]) : null;
+        } else {
+          data[key] = ENUM_FIELDS.includes(key)
+            ? String(body[key]).toUpperCase()
+            : body[key];
+        }
       }
     }
 
