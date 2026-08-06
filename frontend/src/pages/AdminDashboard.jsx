@@ -15,7 +15,7 @@ import {
   RefreshCcw,
   Flag,
   Trash2,
-  IdCard,
+  Contact,
   Ban,
   Wallet,
   RotateCw,
@@ -730,7 +730,7 @@ export default function AdminDashboard() {
                   <div key={c.id} className="bg-white/5 rounded-xl p-4">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="min-w-0 flex items-center gap-3">
-                        <IdCard size={18} className="text-purple-300 flex-shrink-0" />
+                        <Contact size={18} className="text-purple-300 flex-shrink-0" />
                         <div>
                           <p className="font-medium text-sm">{c.holderName}</p>
                           <p className="text-xs text-gray-500">{c.holderEmail} · {c.holderRole}</p>
