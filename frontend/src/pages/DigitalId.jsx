@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
-import { IdCard, Download, ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
+import { Contact, Download, ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
 
 // ---------------------------------------------------------
 // DigitalId Page
@@ -103,7 +103,7 @@ export default function DigitalId() {
         <div className="px-6 mt-4 mb-8 flex flex-col items-center gap-5">
           <div className="text-center">
             <h1 className="text-lg font-semibold flex items-center justify-center gap-2">
-              <IdCard className="text-purple-400" size={20} />
+              <Contact className="text-purple-400" size={20} />
               Digital ID Card
             </h1>
             <p className="text-sm text-gray-400">Your verified FocusForge identity, issued once and always yours.</p>
@@ -119,7 +119,7 @@ export default function DigitalId() {
                 Your Digital ID is issued automatically once your email or mobile number is verified. Head to
                 Settings to complete verification.
               </p>
-              <a
+              
                 href="/settings"
                 className="inline-block bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
               >
