@@ -18,7 +18,7 @@ import {
   X,
   Store,
   Brain,
-  IdCard,
+  Contact,
 } from "lucide-react";
 
 const navItems = [
@@ -32,7 +32,7 @@ const navItems = [
   { key: "classes", label: "Classes Marketplace", icon: Store, path: "/classes" },
   { key: "progress", label: "Progress", icon: BarChart3, path: "/progress" },
   { key: "rewards", label: "Rewards", icon: Trophy, path: "/rewards" },
-  { key: "digital-id", label: "Digital ID", icon: IdCard, path: "/digital-id" },
+  { key: "digital-id", label: "Digital ID", icon: Contact, path: "/digital-id" },
   { key: "penalties", label: "Penalties", icon: ShieldAlert, path: "/penalties" },
   { key: "focus-mode", label: "Focus Mode", icon: Camera, path: "/focus-mode" },
   { key: "settings", label: "Settings", icon: Settings, path: "/settings" },
