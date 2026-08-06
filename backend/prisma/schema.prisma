@@ -1,0 +1,690 @@
+// ===========================================================
+// FocusForge AI — Database Schema (PostgreSQL + Prisma)
+// ===========================================================
+// This schema maps 1:1 to every frontend page already built:
+// Dashboard, Smart Timetable, Today's Plan, Study Room,
+// Focus Mode, Progress, AI Mentor, YouTube Suggestions,
+// Rewards + Certificate Exam, Penalties, Settings.
+//
+// Role-based panels:
+//   STUDENT -> Dashboard (default)
+//   PARENT  -> Parent Dashboard (StudentParentLink)
+//   TEACHER -> Teacher Dashboard (Course + Enrollment)
+// Same login/app — role decides which dashboard loads.
+// ===========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// AUTH & USERS
+// ---------------------------------------------------------
+
+enum Role {
+  STUDENT
+  PARENT
+  TEACHER
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  avatarUrl     String?
+  role          Role     @default(STUDENT)
+  createdAt     DateTime @default(now())
+  emailVerifiedAt DateTime?
+  mobileNumber    String?
+  mobileVerifiedAt DateTime?
+
+  dateOfBirth   DateTime?
+
+  // Gamification (Rewards page)
+  level         Int      @default(1)
+  xp            Int      @default(0)
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveDate DateTime?
+
+  // Settings — Timetable Customization tab
+  studyStartTime String   @default("06:00")
+  studyEndTime   String   @default("22:00")
+  offDays        String[] @default(["Sun"])
+  dailyGoalHours Int      @default(6)
+
+  // Settings — Study Preferences tab
+  breakIntervalMin  Int    @default(45)
+  focusSensitivity  FocusSensitivity @default(MEDIUM)
+
+  // Settings — Notifications tab
+  dailyReminderOn   Boolean @default(true)
+  reminderTime      String  @default("07:30")
+  streakAlertOn     Boolean @default(true)
+  weeklySummaryOn   Boolean @default(false)
+
+  // Settings — Appearance tab
+  theme         Theme   @default(DARK)
+  accentColor   String  @default("purple")
+
+  mentorApiKey  String?
+  teacherVerificationStatus TeacherVerificationStatus @default(NOT_SUBMITTED)
+  teacherVerifiedAt DateTime?
+  razorpayRouteAccountId String?
+
+  digitalId DigitalId?
+
+  // Relations
+  tasks             Task[]
+  roadmapItems      RoadmapItem[]
+  focusSessions     FocusSession[]
+  userBadges        UserBadge[]
+  dailyChallenges    DailyChallenge[]
+  penaltyEvents      PenaltyEvent[]
+  activityLogs       ActivityLog[]
+  certificates       Certificate[]
+  examAttempts       ExamAttempt[]
+  studyRoomMessages  StudyRoomMessage[]
+  aiMentorMessages   AiMentorMessage[]
+  savedVideos        SavedVideo[]
+  roomsCreated       Room[]             @relation("RoomsCreated")
+  roomMemberships    RoomMember[]
+
+  parentLinksAsStudent StudentParentLink[] @relation("StudentLinks")
+  parentLinksAsParent  StudentParentLink[] @relation("ParentLinks")
+
+  teacherCourses      Course[]     @relation("TeacherCourses")
+  studentEnrollments  Enrollment[] @relation("StudentEnrollments")
+  payments            Payment[]
+  teacherVerification TeacherVerification?
+  otpChallenges       OtpChallenge[]
+  paymentRefunds      PaymentRefund[] @relation("RefundRequestedBy")
+
+  studyRoomReportsFiled    StudyRoomMessageReport[] @relation("StudyRoomReportsFiled")
+  studyRoomReportsResolved StudyRoomMessageReport[] @relation("StudyRoomReportsResolved")
+
+  quizAttempts        QuizAttempt[]
+
+  @@map("users")
+}
+
+enum OtpChannel {
+  EMAIL
+  MOBILE
+}
+
+model OtpChallenge {
+  id          String     @id @default(cuid())
+  userId      String?
+  channel     OtpChannel
+  target      String
+  codeHash    String
+  purpose     String     @default("VERIFY_ACCOUNT")
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([target, channel, purpose])
+  @@map("otp_challenges")
+}
+
+enum TeacherVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model TeacherVerification {
+  id             String                    @id @default(cuid())
+  teacherId      String                    @unique
+  status         TeacherVerificationStatus @default(PENDING)
+  fullName       String
+  institute      String?
+  qualification  String?
+  experienceYears Int?
+  idDocumentUrl  String
+  educationDocumentUrl String?
+  notes          String?
+  reviewerNotes  String?
+  submittedAt    DateTime                  @default(now())
+  reviewedAt     DateTime?
+
+  teacher User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("teacher_verifications")
+}
+
+enum DigitalIdStatus {
+  ACTIVE
+  REVOKED
+}
+
+model DigitalId {
+  id          String          @id @default(cuid())
+  userId      String          @unique
+  cardNumber  String          @unique
+  verifyToken String          @unique
+  status      DigitalIdStatus @default(ACTIVE)
+  issuedAt    DateTime        @default(now())
+  revokedAt   DateTime?
+  revokedById String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("digital_ids")
+}
+
+enum FocusSensitivity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Theme {
+  DARK
+  LIGHT
+}
+
+enum LinkStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StudentParentLink {
+  id          String     @id @default(cuid())
+  studentId   String
+  parentId    String
+  connectedAt DateTime   @default(now())
+
+  status      LinkStatus @default(PENDING)
+  respondedAt DateTime?
+
+  student User @relation("StudentLinks", fields: [studentId], references: [id])
+  parent  User @relation("ParentLinks", fields: [parentId], references: [id])
+
+  minDailyGoalHours Int?
+
+  @@unique([studentId, parentId])
+  @@map("student_parent_links")
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  teacherId   String
+  title       String
+  description String?
+  price       Float    @default(0)
+  createdAt   DateTime @default(now())
+  published   Boolean  @default(true)
+
+  teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id])
+  enrollments Enrollment[]
+  payments    Payment[]
+  videos      CourseVideo[]
+
+  @@map("courses")
+}
+
+model CourseVideo {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  videoUrl    String
+  storageKey  String?
+  durationSec Int?
+  sortOrder   Int      @default(0)
+  isPreview   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId, sortOrder])
+  @@map("course_videos")
+}
+
+enum EnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Enrollment {
+  id            String            @id @default(cuid())
+  studentId     String
+  courseId      String
+  enrolledAt    DateTime          @default(now())
+  progress      Int               @default(0)
+  status        EnrollmentStatus  @default(PENDING)
+  contactNumber String @default("")
+  respondedAt   DateTime?
+
+  student User   @relation("StudentEnrollments", fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+  payments Payment[]
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                 String        @id @default(cuid())
+  enrollmentId       String
+  studentId          String
+  courseId           String
+  razorpayOrderId    String        @unique
+  razorpayPaymentId  String?       @unique
+  razorpaySignature  String?
+  amountPaise        Int
+  currency           String        @default("INR")
+  receipt            String
+  status             PaymentStatus @default(CREATED)
+  platformFeePaise   Int           @default(0)
+  teacherAmountPaise Int           @default(0)
+  payoutStatus       PayoutStatus  @default(NOT_READY)
+  payoutReference    String?
+  createdAt          DateTime      @default(now())
+  paidAt             DateTime?
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id])
+  course     Course     @relation(fields: [courseId], references: [id])
+  invoice    Invoice?
+  refunds    PaymentRefund[]
+
+  @@index([studentId, courseId])
+  @@map("payments")
+}
+
+enum PayoutStatus {
+  NOT_READY
+  ROUTE_PENDING
+  ROUTE_LINKED
+  PAID_OUT
+  FAILED
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
+model PaymentRefund {
+  id                 String       @id @default(cuid())
+  paymentId          String
+  requestedById      String
+  amountPaise        Int
+  reason             String?
+  status             RefundStatus @default(REQUESTED)
+  razorpayRefundId   String?      @unique
+  processedAt        DateTime?
+  createdAt          DateTime     @default(now())
+
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+
+  @@map("payment_refunds")
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  paymentId     String   @unique
+  invoiceNumber String   @unique
+  studentName   String
+  studentEmail  String
+  teacherName   String
+  courseTitle   String
+  amountPaise   Int
+  platformFeePaise Int
+  teacherAmountPaise Int
+  currency      String   @default("INR")
+  issuedAt      DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model PaymentWebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  eventType   String
+  processedAt DateTime @default(now())
+
+  @@map("payment_webhook_events")
+}
+// ---------------------------------------------------------
+// TODAY'S PLAN
+// ---------------------------------------------------------
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  category    String?
+  priority    Priority @default(MEDIUM)
+  completed   Boolean  @default(false)
+  date        DateTime @default(now())
+  weekNumber  Int?
+  monthNumber Int?
+  time        String?  // optional "HH:MM" — when the task is scheduled for, plain text (no timezone logic yet)
+  duration    String?  // optional free-text estimate, e.g. "45 min", "1h" — not parsed/validated, just displayed
+  createdAt   DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  subtasks Subtask[]
+
+  @@map("tasks")
+}
+
+model Subtask {
+  id        String  @id @default(cuid())
+  taskId    String
+  title     String
+  completed Boolean @default(false)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("subtasks")
+}
+
+enum RoadmapStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model RoadmapItem {
+  id          String        @id @default(cuid())
+  userId      String
+  weekNumber  Int
+  monthNumber Int
+  monthLabel  String
+  title       String
+  description String?
+  tools       String?
+  hours       String?
+  project     String?
+  status      RoadmapStatus @default(UPCOMING)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("roadmap_items")
+}
+
+model FocusSession {
+  id             String   @id @default(cuid())
+  userId         String
+  startedAt      DateTime
+  endedAt        DateTime?
+  durationSec    Int      @default(0)
+  focusScore     Int      @default(0)
+  distractions   Int      @default(0)
+  subject        String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("focus_sessions")
+}
+
+model Badge {
+  id       String @id @default(cuid())
+  code     String @unique
+  icon     String
+  title    String
+  desc     String
+  xpReward Int
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model DailyChallenge {
+  id     String   @id @default(cuid())
+  userId String
+  title  String
+  xp     Int
+  date   DateTime @default(now())
+  done   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("daily_challenges")
+}
+
+model Certificate {
+  id                 String   @id @default(cuid())
+  userId             String
+  certificateCode    String   @unique
+  title              String
+  score              Int
+  projectsCompleted  String[]
+  issuedAt           DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("certificates")
+}
+
+model ExamAttempt {
+  id                     String    @id @default(cuid())
+  userId                 String
+  topic                  String
+  attemptNumber          Int
+  score                  Int?
+  passed                 Boolean?
+  startedAt              DateTime  @default(now())
+  submittedAt            DateTime?
+  nextAttemptAvailableAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("exam_attempts")
+}
+
+enum PenaltyType {
+  MISSED_TASK
+  LOW_FOCUS
+  STREAK_BREAK
+}
+
+enum Severity {
+  YELLOW
+  ORANGE
+  RED
+}
+
+model PenaltyEvent {
+  id             String      @id @default(cuid())
+  userId         String
+  type           PenaltyType
+  severity       Severity
+  title          String
+  xpDeducted     Int         @default(0)
+  date           DateTime    @default(now())
+  resolved       Boolean     @default(false)
+  redemptionDone Boolean     @default(false)
+
+  // Links back to the Task/FocusSession id (or a fixed string like
+  // "streak" for streak-break events) that triggered this penalty,
+  // purely so the auto-detection logic can check "have I already
+  // created a penalty for this exact thing?" without re-scanning
+  // titles. Nullable because manually-created events won't have one.
+  sourceId       String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("penalty_events")
+}
+
+// ---------------------------------------------------------
+// ACTIVITY LOG — backs the Rewards page "Recent Activity" feed
+// ---------------------------------------------------------
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  icon      String   @default("⭐")
+  text      String
+  xp        Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String
+  subject     String?
+  isGlobal    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy User? @relation("RoomsCreated", fields: [createdById], references: [id])
+  messages  StudyRoomMessage[]
+  members   RoomMember[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  id       String   @id @default(cuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@map("room_members")
+}
+
+model StudyRoomMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  roomId    String
+  message   String
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  reports StudyRoomMessageReport[]
+
+  @@map("study_room_messages")
+}
+
+enum ReportStatus {
+  PENDING
+  MESSAGE_DELETED
+  DISMISSED
+}
+
+model StudyRoomMessageReport {
+  id           String       @id @default(cuid())
+  messageId    String
+  reportedById String
+  reason       String?
+  status       ReportStatus @default(PENDING)
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  message    StudyRoomMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reportedBy User             @relation("StudyRoomReportsFiled", fields: [reportedById], references: [id])
+  resolvedBy User?            @relation("StudyRoomReportsResolved", fields: [resolvedById], references: [id])
+
+  @@index([status])
+  @@map("study_room_message_reports")
+}
+
+enum MessageRole {
+  USER
+  MENTOR
+}
+
+model AiMentorMessage {
+  id        String      @id @default(cuid())
+  userId    String
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("ai_mentor_messages")
+}
+
+model SavedVideo {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?
+  title     String
+  channel   String?
+  savedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("saved_videos")
+}
+
+model QuizAttempt {
+  id            String   @id @default(cuid())
+  userId        String
+  topic         String
+  correctCount  Int
+  totalQuestions Int
+  scorePercent  Int
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("quiz_attempts")
+}

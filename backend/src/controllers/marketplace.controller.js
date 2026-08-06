@@ -1,0 +1,166 @@
+// ---------------------------------------------------------
+// controllers/marketplace.controller.js
+// Classes Marketplace — with a real approval flow.
+//
+// Enrolling no longer instantly counts as a student. It
+// creates a PENDING request (with the student's contact
+// number). Only after the teacher APPROVES it (after
+// confirming payment themselves) does it count toward real
+// student/earnings numbers.
+// ---------------------------------------------------------
+
+const prisma = require("../config/db");
+const logger = require("../utils/logger");
+
+// GET /api/marketplace/courses
+async function browseCourses(req, res) {
+  try {
+    const studentId = req.user.userId;
+
+    const courses = await prisma.course.findMany({
+      where: { published: true, teacher: { teacherVerificationStatus: "APPROVED" } },
+      orderBy: { createdAt: "desc" },
+      include: {
+        teacher: { select: { id: true, name: true } },
+        enrollments: { select: { studentId: true, status: true } },
+        videos: { select: { id: true, isPreview: true } },
+      },
+    });
+
+    const results = courses.map((c) => {
+      const myEnrollment = c.enrollments.find((e) => e.studentId === studentId);
+      const approvedCount = c.enrollments.filter((e) => e.status === "APPROVED").length;
+
+      return {
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        price: c.price,
+        teacherName: c.teacher.name,
+        studentsEnrolled: approvedCount, // only real, paid/approved students count
+        enrollmentStatus: myEnrollment ? myEnrollment.status : null, // null | PENDING | APPROVED | REJECTED
+        videoCount: c.videos.length,
+        previewVideoCount: c.videos.filter((v) => v.isPreview).length,
+        createdAt: c.createdAt,
+      };
+    });
+
+    return res.json({ courses: results });
+  } catch (err) {
+    logger.error("Marketplace browseCourses error:", err);
+    return res.status(500).json({ error: "Failed to load courses." });
+  }
+}
+
+// POST /api/marketplace/courses/:courseId/enroll
+// Body: { name, contactNumber }
+// Creates a PENDING request — NOT an instant enrollment.
+async function enrollInCourse(req, res) {
+  try {
+    const studentId = req.user.userId;
+    const { courseId } = req.params;
+    const { contactNumber } = req.body;
+
+    if (!contactNumber || !contactNumber.trim()) {
+      return res.status(400).json({ error: "Contact number is required so the teacher can confirm payment." });
+    }
+
+    const course = await prisma.course.findFirst({
+      where: { id: courseId, published: true, teacher: { teacherVerificationStatus: "APPROVED" } },
+    });
+    if (!course) {
+      return res.status(404).json({ error: "Course not found." });
+    }
+
+    if (course.price > 0) {
+      return res.status(400).json({ error: "Paid courses must be enrolled through Razorpay Checkout." });
+    }
+
+    const existing = await prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+    });
+
+    if (existing) {
+      if (existing.status === "APPROVED") {
+        return res.status(409).json({ error: "You're already enrolled in this course." });
+      }
+      // status was REJECTED — allow requesting again
+      const updated = await prisma.enrollment.update({
+        where: { id: existing.id },
+        data: { status: "APPROVED", contactNumber: contactNumber.trim(), respondedAt: new Date() },
+      });
+      return res.status(201).json({ message: "You're enrolled in this free course.", enrollment: updated });
+    }
+
+    const enrollment = await prisma.enrollment.create({
+      data: { studentId, courseId, contactNumber: contactNumber.trim(), status: "APPROVED", respondedAt: new Date() },
+    });
+
+    return res.status(201).json({
+      message: `You're enrolled in "${course.title}".`,
+      enrollment,
+    });
+  } catch (err) {
+    logger.error("Marketplace enrollInCourse error:", err);
+    return res.status(500).json({ error: "Failed to submit enrollment request." });
+  }
+}
+
+// GET /api/marketplace/my-courses
+// Shows ALL of the student's requests, whatever status they're in,
+// so a student can see "Pending" ones too, not just approved ones.
+async function getMyCourses(req, res) {
+  try {
+    const studentId = req.user.userId;
+
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId },
+      include: { course: { include: { teacher: { select: { name: true } }, videos: true } } },
+      orderBy: { enrolledAt: "desc" },
+    });
+
+    const results = enrollments.map((e) => ({
+      enrollmentId: e.id,
+      courseId: e.course.id,
+      title: e.course.title,
+      teacherName: e.course.teacher.name,
+      progress: e.progress,
+      status: e.status,
+      videoCount: e.course.videos.length,
+      enrolledAt: e.enrolledAt,
+    }));
+
+    return res.json({ courses: results });
+  } catch (err) {
+    logger.error("Marketplace getMyCourses error:", err);
+    return res.status(500).json({ error: "Failed to load your courses." });
+  }
+}
+
+async function getCourseVideos(req, res) {
+  try {
+    const studentId = req.user.userId;
+    const { courseId } = req.params;
+
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+    });
+
+    const canViewAll = enrollment?.status === "APPROVED";
+    const videos = await prisma.courseVideo.findMany({
+      where: canViewAll ? { courseId } : { courseId, isPreview: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+
+    if (!canViewAll && videos.length === 0) {
+      return res.status(403).json({ error: "Enroll in this course to watch lessons." });
+    }
+
+    return res.json({ videos, enrolled: canViewAll });
+  } catch (err) {
+    logger.error("Marketplace getCourseVideos error:", err);
+    return res.status(500).json({ error: "Failed to load course videos." });
+  }
+}
+
+module.exports = { browseCourses, enrollInCourse, getMyCourses, getCourseVideos };
