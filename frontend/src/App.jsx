@@ -25,6 +25,8 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import ClassesMarketplace from "./pages/ClassesMarketplace";
 import QuizGenerator from "./pages/QuizGenerator";
+import DigitalId from "./pages/DigitalId";
+import VerifyId from "./pages/VerifyId";
 import HeyForgeWidget from "./components/HeyForgeWidget";
 
 export default function App() {
@@ -37,6 +39,7 @@ export default function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/verify-id/:token" element={<VerifyId />} />
 
           {/* Role-specific dashboards */}
           <Route
@@ -86,6 +89,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/digital-id"
+            element={
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
+                <DigitalId />
               </ProtectedRoute>
             }
           />
