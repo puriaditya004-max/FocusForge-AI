@@ -119,7 +119,7 @@ export default function DigitalId() {
                 Your Digital ID is issued automatically once your email or mobile number is verified. Head to
                 Settings to complete verification.
               </p>
-              
+              <a
                 href="/settings"
                 className="inline-block bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
               >
