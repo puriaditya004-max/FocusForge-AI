@@ -1,5 +1,11 @@
 const crypto = require("crypto");
 const logger = require("./logger");
+let nodemailer;
+try {
+  nodemailer = require("nodemailer");
+} catch {
+  nodemailer = null; // package not installed yet — dev-log fallback still works
+}
 
 function generateOtp() {
   return String(crypto.randomInt(100000, 1000000));
@@ -115,8 +121,60 @@ async function deliverOtp({ channel, target, code }) {
     return deliverSms(target, code);
   }
 
-  // EMAIL channel — unchanged: webhook if configured, else dev log.
-  if (channel === "EMAIL" && process.env.EMAIL_OTP_WEBHOOK_URL) {
+  // EMAIL channel
+  return deliverEmail(target, code);
+}
+
+// ---------------------------------------------------------
+// Real email delivery via SMTP (Nodemailer). Works with Gmail,
+// Brevo, Zoho, or any SMTP provider — just set env vars:
+//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
+// Falls back to a webhook (if EMAIL_OTP_WEBHOOK_URL is set),
+// then to a dev-only console log if nothing is configured.
+// ---------------------------------------------------------
+let cachedTransporter = null;
+function getTransporter() {
+  if (cachedTransporter) return cachedTransporter;
+  if (!nodemailer || !process.env.SMTP_HOST) return null;
+
+  cachedTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: Number(process.env.SMTP_PORT) === 465, // true for port 465, false for 587/others
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+  return cachedTransporter;
+}
+
+async function deliverEmail(target, code) {
+  const transporter = getTransporter();
+
+  if (transporter) {
+    const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER;
+    await transporter.sendMail({
+      from: `FocusForge AI <${fromAddress}>`,
+      to: target,
+      subject: `${code} is your FocusForge AI verification code`,
+      text: `Your FocusForge AI verification code is ${code}. It expires in 10 minutes. Do not share this code with anyone.`,
+      html: `
+        <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 420px; margin: 0 auto; padding: 32px 24px; background: #0e0e18; border-radius: 16px; color: #e5e7eb;">
+          <p style="font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: #a78bfa; margin: 0 0 4px;">FocusForge AI</p>
+          <h1 style="font-size: 20px; margin: 0 0 16px; color: #fff;">Verify your email</h1>
+          <p style="font-size: 14px; color: #9ca3af; margin: 0 0 24px;">Enter this code in the app to verify your email address:</p>
+          <div style="font-size: 32px; font-weight: 700; letter-spacing: 0.15em; color: #fff; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            ${code}
+          </div>
+          <p style="font-size: 12px; color: #6b7280; margin: 0;">This code expires in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+    return;
+  }
+
+  if (process.env.EMAIL_OTP_WEBHOOK_URL) {
     await fetch(process.env.EMAIL_OTP_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -125,7 +183,8 @@ async function deliverOtp({ channel, target, code }) {
     return;
   }
 
-  logger.info(`DEV OTP ${channel} ${target}: ${code}`);
+  // No provider configured — dev mode, log only.
+  logger.info(`DEV OTP EMAIL ${target}: ${code}`);
 }
 
 module.exports = { generateOtp, hashOtp, verifyOtpHash, deliverOtp };
