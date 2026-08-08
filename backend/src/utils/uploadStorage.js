@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { s3Client, BUCKET, PUBLIC_BASE_URL } = require("../config/storage");
 
 const UPLOAD_ROOT = path.resolve(__dirname, "../../uploads");
 
@@ -24,7 +25,12 @@ function parseDataUrl(dataUrl) {
   return { mimeType: match[1], buffer: Buffer.from(match[2], "base64") };
 }
 
-function saveDataUrl(dataUrl, folder, allowedMimeTypes, maxBytes) {
+// NOTE: async now (was sync before) because the S3/R2 path has to
+// await a network call. Every caller (teacher.controller.js,
+// verification.controller.js) already runs inside an async handler,
+// so they just need `await` added in front of the call -- no other
+// changes needed there.
+async function saveDataUrl(dataUrl, folder, allowedMimeTypes, maxBytes) {
   const { mimeType, buffer } = parseDataUrl(dataUrl);
   if (!allowedMimeTypes.includes(mimeType)) {
     const err = new Error(`Unsupported file type: ${mimeType}`);
@@ -38,14 +44,29 @@ function saveDataUrl(dataUrl, folder, allowedMimeTypes, maxBytes) {
   }
 
   const relativeFolder = folder.replace(/[^a-zA-Z0-9/_-]/g, "");
+  const filename = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extensionFromMime(mimeType)}`;
+  const storageKey = `${relativeFolder}/${filename}`.replace(/\\/g, "/");
+
+  if (s3Client) {
+    const { PutObjectCommand } = require("@aws-sdk/client-s3");
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: storageKey,
+        Body: buffer,
+        ContentType: mimeType,
+      })
+    );
+    const publicUrl = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/${storageKey}` : `/uploads/${storageKey}`;
+    return { storageKey, publicUrl, mimeType, size: buffer.length };
+  }
+
+  // --- Fallback: local disk (unchanged from before) ---
   const absoluteFolder = path.join(UPLOAD_ROOT, relativeFolder);
   fs.mkdirSync(absoluteFolder, { recursive: true });
-
-  const filename = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extensionFromMime(mimeType)}`;
   const absolutePath = path.join(absoluteFolder, filename);
   fs.writeFileSync(absolutePath, buffer);
 
-  const storageKey = `${relativeFolder}/${filename}`.replace(/\\/g, "/");
   return { storageKey, publicUrl: `/uploads/${storageKey}`, mimeType, size: buffer.length };
 }
 
