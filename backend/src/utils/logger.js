@@ -64,4 +64,25 @@ const logger = winston.createLogger({
   transports,
 });
 
+// --- Sentry hook (see comment at the top of this file) ---
+// Every logger.error(...) call also forwards to Sentry when
+// SENTRY_DSN is configured, so production errors are tracked and
+// alertable somewhere that survives a Render restart — not just
+// written to logs/error.log, which doesn't. No-ops entirely if
+// Sentry isn't configured (config/sentry.js exports null).
+const Sentry = require("../config/sentry");
+if (Sentry) {
+  const originalError = logger.error.bind(logger);
+  logger.error = (message, ...meta) => {
+    originalError(message, ...meta);
+    const errorArg = [message, ...meta].find((item) => item instanceof Error);
+    if (errorArg) {
+      Sentry.captureException(errorArg);
+    } else {
+      Sentry.captureMessage(String(message), "error");
+    }
+    return logger;
+  };
+}
+
 module.exports = logger;
