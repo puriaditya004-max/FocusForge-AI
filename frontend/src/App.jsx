@@ -22,7 +22,6 @@ import Penalties from "./pages/Penalties";
 import Settings from "./pages/Settings";
 import ParentDashboard from "./pages/ParentDashboard";
 import TeacherDashboard from "./pages/TeacherDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
 import ClassesMarketplace from "./pages/ClassesMarketplace";
 import QuizGenerator from "./pages/QuizGenerator";
 import DigitalId from "./pages/DigitalId";
@@ -55,14 +54,6 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={["TEACHER"]}>
                 <TeacherDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={["ADMIN"]}>
-                <AdminDashboard />
               </ProtectedRoute>
             }
           />
