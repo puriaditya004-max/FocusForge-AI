@@ -18,6 +18,7 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
 const { generateOtp, hashOtp, verifyOtpHash, deliverOtp } = require("../utils/otp");
+const { isMinor } = require("../utils/age.util");
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -39,6 +40,9 @@ function signToken(user) {
 // Never send the password hash back to the frontend
 function toSafeUser(user) {
   const { passwordHash, ...safe } = user;
+  // Lets the frontend show a "parent consent required" gate without
+  // re-deriving age from a raw DOB string on every page.
+  safe.isMinor = isMinor(user.dateOfBirth);
   return safe;
 }
 
