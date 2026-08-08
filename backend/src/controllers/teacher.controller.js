@@ -9,8 +9,11 @@
 
 const prisma = require("../config/db");
 const fs = require("fs");
+const path = require("path");
 const logger = require("../utils/logger");
-const { saveDataUrl } = require("../utils/uploadStorage");
+const { saveDataUrl, UPLOAD_ROOT } = require("../utils/uploadStorage");
+const { s3Client, BUCKET, PUBLIC_BASE_URL } = require("../config/storage");
+const { Upload } = s3Client ? require("@aws-sdk/lib-storage") : {};
 
 const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"];
 // The base64 JSON path (addCourseVideo, below) goes through express.json's
@@ -142,7 +145,7 @@ async function addCourseVideo(req, res) {
     let videoUrl = req.body.videoUrl;
     let storageKey = null;
     if (req.body.videoDataUrl) {
-      const saved = saveDataUrl(req.body.videoDataUrl, `course-videos/${courseId}`, VIDEO_MIMES, MAX_BASE64_VIDEO_BYTES);
+      const saved = await saveDataUrl(req.body.videoDataUrl, `course-videos/${courseId}`, VIDEO_MIMES, MAX_BASE64_VIDEO_BYTES);
       videoUrl = saved.publicUrl;
       storageKey = saved.storageKey;
     }
@@ -170,8 +173,10 @@ async function addCourseVideo(req, res) {
 // POST /api/teacher/courses/:courseId/videos/upload
 // Multipart counterpart to addCourseVideo — use this for real
 // lecture-length videos. multer (videoUpload.middleware.js) has
-// already streamed the file to disk by the time this runs; we
-// just record where it landed.
+// already streamed the file to a TEMP folder by the time this runs.
+// From here we either push it up to R2/S3 (if configured) or move
+// it into the permanent local uploads folder (fallback, same as
+// the original behavior) — either way the temp copy is cleaned up.
 async function uploadCourseVideo(req, res) {
   try {
     const teacherId = req.user.userId;
@@ -191,14 +196,42 @@ async function uploadCourseVideo(req, res) {
     }
 
     const relativeFolder = `course-videos/${courseId}`;
-    const storageKey = `${relativeFolder}/${req.file.filename}`;
+    const filename = req.file.filename;
+    const storageKey = `${relativeFolder}/${filename}`;
+    let videoUrl;
+
+    if (s3Client) {
+      // Stream the temp file straight up to R2/S3 — Upload (from
+      // @aws-sdk/lib-storage) handles multipart upload internally,
+      // so this stays memory-flat even for a 250MB video.
+      const fileStream = fs.createReadStream(req.file.path);
+      const upload = new Upload({
+        client: s3Client,
+        params: {
+          Bucket: BUCKET,
+          Key: storageKey,
+          Body: fileStream,
+          ContentType: req.file.mimetype,
+        },
+      });
+      await upload.done();
+      fs.unlink(req.file.path, () => {}); // temp copy no longer needed once it's in R2/S3
+      videoUrl = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/${storageKey}` : `/uploads/${storageKey}`;
+    } else {
+      // Fallback: move out of the temp folder into the permanent
+      // local uploads folder — identical to the pre-S3 behavior.
+      const permanentFolder = path.join(UPLOAD_ROOT, relativeFolder);
+      fs.mkdirSync(permanentFolder, { recursive: true });
+      fs.renameSync(req.file.path, path.join(permanentFolder, filename));
+      videoUrl = `/uploads/${storageKey}`;
+    }
 
     const video = await prisma.courseVideo.create({
       data: {
         courseId,
         title: req.body.title.trim(),
         description: req.body.description?.trim() || null,
-        videoUrl: `/uploads/${storageKey}`,
+        videoUrl,
         storageKey,
         durationSec: req.body.durationSec ? Number(req.body.durationSec) : null,
         sortOrder: req.body.sortOrder ? Number(req.body.sortOrder) : 0,
