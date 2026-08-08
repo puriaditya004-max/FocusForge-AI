@@ -13,10 +13,13 @@
 //
 //   2. RateLimiter — caps how many messages one user can send
 //      per room in a rolling window, to stop spam/flooding.
-//      In-memory (like the online-users map in the socket file)
-//      because it's transient and doesn't need to survive a
-//      server restart.
+//      Uses Redis (shared counter, TTL = window) when REDIS_URL
+//      is set, so the limit holds even across multiple backend
+//      instances. Falls back to the original in-memory Map when
+//      Redis isn't configured — same behavior as before, just
+//      single-instance only.
 // ---------------------------------------------------------
+const redisClient = require("../config/redis");
 
 // Intentionally short and blunt — extend as needed. Kept lowercase;
 // matching is case-insensitive and ignores basic leetspeak substitutions.
@@ -43,12 +46,23 @@ function containsBannedWord(text) {
 }
 
 // roomId:userId -> array of send timestamps (ms) within the window
+// (only used as the fallback when REDIS_URL isn't set)
 const sendLog = new Map();
 const WINDOW_MS = 10_000; // 10 seconds
 const MAX_MESSAGES_PER_WINDOW = 8;
 
-function isRateLimited(roomId, userId) {
-  const key = `${roomId}:${userId}`;
+async function isRateLimitedRedis(key) {
+  // INCR + first-hit EXPIRE gives us a simple fixed-window counter:
+  // each key counts messages in the current 10s window and expires
+  // on its own, so there's nothing to clean up.
+  const count = await redisClient.incr(key);
+  if (count === 1) {
+    await redisClient.pexpire(key, WINDOW_MS);
+  }
+  return count > MAX_MESSAGES_PER_WINDOW;
+}
+
+function isRateLimitedMemory(key) {
   const now = Date.now();
   const timestamps = (sendLog.get(key) || []).filter((t) => now - t < WINDOW_MS);
 
@@ -60,6 +74,20 @@ function isRateLimited(roomId, userId) {
   timestamps.push(now);
   sendLog.set(key, timestamps);
   return false;
+}
+
+async function isRateLimited(roomId, userId) {
+  const key = `chatrl:${roomId}:${userId}`;
+  if (redisClient) {
+    try {
+      return await isRateLimitedRedis(key);
+    } catch (err) {
+      // Redis hiccup shouldn't block chat entirely — fall back to
+      // the in-memory check for this call instead of throwing.
+      return isRateLimitedMemory(key);
+    }
+  }
+  return isRateLimitedMemory(key);
 }
 
 module.exports = { containsBannedWord, isRateLimited, MAX_MESSAGES_PER_WINDOW };
