@@ -28,6 +28,24 @@
 // quota (see mentor.controller.js) has headroom to spare.
 // ---------------------------------------------------------
 const rateLimit = require("express-rate-limit");
+const redisClient = require("../config/redis");
+
+// If REDIS_URL is set, every limiter shares its counters via Redis —
+// so the limits are enforced correctly across however many backend
+// instances Render is running, instead of each instance keeping its
+// own separate (and therefore bypassable) in-memory count. If
+// REDIS_URL isn't set, `store` stays undefined and express-rate-limit
+// falls back to its built-in in-memory store, exactly as before.
+function redisStore(prefix) {
+  if (!redisClient) return undefined;
+  const RedisStore = require("rate-limit-redis").default;
+  return new RedisStore({
+    // ioredis's `call` is the low-level command sender that
+    // rate-limit-redis expects.
+    sendCommand: (...args) => redisClient.call(...args),
+    prefix: `rl:${prefix}:`,
+  });
+}
 
 const AI_DAILY_MAX = 40; // combined cap across message/voice-command/generate-quiz, per user, per day
 const AI_BURST_MAX = 6; // stops a script from firing the whole daily cap in one minute
@@ -37,6 +55,7 @@ const authLimiter = rateLimit({
   max: 8, // 8 attempts per window per key
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("auth"),
   keyGenerator: (req) => {
     const email = (req.body?.email || "").toLowerCase().trim();
     return `${req.ip}:${email}`;
@@ -53,6 +72,7 @@ const apiLimiter = rateLimit({
   max: 300, // generous, just stops scripted abuse
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("api"),
   handler: (req, res) => {
     return res.status(429).json({
       error: "Too many requests. Please slow down and try again shortly.",
@@ -69,6 +89,7 @@ const aiDailyLimiter = rateLimit({
   max: AI_DAILY_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("ai-daily"),
   keyGenerator: aiKeyGenerator,
   handler: (req, res) => {
     return res.status(429).json({
@@ -83,6 +104,7 @@ const aiBurstLimiter = rateLimit({
   max: AI_BURST_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("ai-burst"),
   keyGenerator: aiKeyGenerator,
   handler: (req, res) => {
     return res.status(429).json({
