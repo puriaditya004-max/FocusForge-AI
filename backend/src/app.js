@@ -32,16 +32,23 @@ app.use(helmet());
 app.disable("x-powered-by");
 
 // --- Allowed origins ---
-// Requests now come from 4 different places:
+// Requests now come from 5 different places:
 //  1. The deployed Vercel frontend (CLIENT_URL env var)
-//  2. Local dev (npm run dev on your laptop)
-//  3. The Capacitor Android app — serves its content from the
+//  2. The standalone admin app, deployed separately at its own
+//     subdomain (ADMIN_URL env var) — e.g. https://admin.focusforge.app.
+//     This is the only backend change the admin-app separation
+//     needed: same /api/admin/* routes, same JWT cookie, just a
+//     second trusted origin allowed to call them with credentials.
+//  3. Local dev (npm run dev on your laptop, either app)
+//  4. The Capacitor Android app — serves its content from the
 //     fixed origin "https://localhost" (set by androidScheme:
 //     "https" in capacitor.config.ts)
-//  4. A Capacitor iOS app, if/when built — uses "capacitor://localhost"
+//  5. A Capacitor iOS app, if/when built — uses "capacitor://localhost"
 const allowedOrigins = [
   process.env.CLIENT_URL,        // e.g. https://focus-forge-ai-woad.vercel.app
+  process.env.ADMIN_URL,         // e.g. https://admin.focusforge.app
   "http://localhost:5173",       // local frontend dev server
+  "http://localhost:5174",       // local admin-app dev server
   "https://localhost",           // Capacitor Android app
   "capacitor://localhost",       // Capacitor iOS app
 ].filter(Boolean);

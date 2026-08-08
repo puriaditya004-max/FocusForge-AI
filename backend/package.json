@@ -10,7 +10,8 @@
     "test": "cross-env NODE_ENV=test JWT_SECRET=test-only-secret-do-not-use-in-prod jest --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "make-admin": "node scripts/makeAdmin.js"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
