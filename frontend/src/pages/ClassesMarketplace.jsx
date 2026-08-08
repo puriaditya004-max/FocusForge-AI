@@ -443,6 +443,12 @@ export default function ClassesMarketplace() {
                 {formMessage}
               </div>
             )}
+            {activeCourse.price > 0 && user?.isMinor && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs rounded-lg p-2 mb-3">
+                This is a minor account. A parent must link and approve this account (Parent
+                Dashboard → link request) before a paid enrollment can go through.
+              </div>
+            )}
 
             <form onSubmit={submitEnrollment} className="flex flex-col gap-3">
               <div>

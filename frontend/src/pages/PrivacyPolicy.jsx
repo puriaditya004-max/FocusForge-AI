@@ -142,7 +142,28 @@ export default function PrivacyPolicy() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white mb-2">10. Contact us</h2>
+            <h2 className="text-lg font-semibold text-white mb-2">10. Grievance Officer</h2>
+            <p>
+              In accordance with the Information Technology (Intermediary Guidelines and Digital
+              Media Ethics Code) Rules, 2021, the following Grievance Officer has been designated to
+              address user complaints regarding this platform, including content in Study Room and
+              any other user-generated content:
+            </p>
+            <p className="mt-2">
+              <strong>Grievance Officer:</strong> Aditya Datta Puri
+              <br />
+              <strong>Email:</strong>{" "}
+              <a href="mailto:focusforgeai1026@gmail.com" className="text-purple-400 hover:underline">
+                focusforgeai1026@gmail.com
+              </a>
+              <br />
+              <strong>Response timeline:</strong> Complaints will be acknowledged within 24 hours and
+              resolved within 15 days, as required under Rule 3(2) of the IT Rules, 2021.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-semibold text-white mb-2">11. Contact us</h2>
             <p>
               Questions about this policy or your data? Contact us at{" "}
               <a href="mailto:focusforgeai1026@gmail.com" className="text-purple-400 hover:underline">
