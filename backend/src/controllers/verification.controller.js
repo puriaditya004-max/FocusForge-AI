@@ -25,9 +25,9 @@ async function getTeacherVerification(req, res) {
 async function submitTeacherVerification(req, res) {
   try {
     const teacherId = req.user.userId;
-    const idDoc = saveDataUrl(req.body.idDocumentDataUrl, `teacher-docs/${teacherId}`, DOCUMENT_MIMES, MAX_DOCUMENT_BYTES);
+    const idDoc = await saveDataUrl(req.body.idDocumentDataUrl, `teacher-docs/${teacherId}`, DOCUMENT_MIMES, MAX_DOCUMENT_BYTES);
     const eduDoc = req.body.educationDocumentDataUrl
-      ? saveDataUrl(req.body.educationDocumentDataUrl, `teacher-docs/${teacherId}`, DOCUMENT_MIMES, MAX_DOCUMENT_BYTES)
+      ? await saveDataUrl(req.body.educationDocumentDataUrl, `teacher-docs/${teacherId}`, DOCUMENT_MIMES, MAX_DOCUMENT_BYTES)
       : null;
 
     const verification = await prisma.$transaction(async (tx) => {
