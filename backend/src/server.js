@@ -11,6 +11,19 @@ const studyRoomSocket = require("./sockets/studyroom.socket");
 const redisClient = require("./config/redis");
 const logger = require("./utils/logger");
 
+// Crashes that happen outside any Express route (a rejected promise
+// nobody awaited, a genuinely uncaught throw) never hit app.js's
+// error handler, so they'd previously vanish with nothing but
+// whatever Node prints to stderr right before the process dies.
+// Routing them through logger.error means they now also reach
+// Sentry (when SENTRY_DSN is set) instead of disappearing.
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled promise rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught exception:", err);
+});
+
 const PORT = process.env.PORT || 5000;
 
 const httpServer = http.createServer(app);
