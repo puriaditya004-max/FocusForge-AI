@@ -20,7 +20,7 @@ const ROLE_HOME = {
   STUDENT: "/dashboard",
   PARENT: "/parent-dashboard",
   TEACHER: "/teacher-dashboard",
-  ADMIN: "/admin-dashboard",
+  ADMIN: "/login",
 };
 
 export default function ProtectedRoute({ children, allowedRoles }) {
