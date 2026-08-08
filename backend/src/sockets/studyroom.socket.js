@@ -124,7 +124,7 @@ module.exports = function studyRoomSocket(io) {
           });
         }
 
-        if (isRateLimited(roomId, socket.userId)) {
+        if (await isRateLimited(roomId, socket.userId)) {
           return socket.emit("error_message", {
             error: "You're sending messages too fast. Slow down a bit.",
           });
