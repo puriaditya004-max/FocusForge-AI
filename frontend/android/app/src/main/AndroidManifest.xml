@@ -38,4 +38,16 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Focus Mode (see frontend/src/lib/focusDetection) uses the
+         device camera via getUserMedia in the WebView, entirely
+         on-device -- no video ever leaves the app. Capacitor's
+         bridge handles the runtime permission prompt automatically,
+         but the manifest permission must be declared or that prompt
+         never appears and getUserMedia silently fails. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- required="false" so the app still installs on devices/
+         tablets without a camera -- Focus Mode just won't be usable
+         there, everything else works normally. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
