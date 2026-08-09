@@ -17,6 +17,7 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
+    "@mediapipe/tasks-vision": "^0.10.14",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.383.0",
     "qrcode": "^1.5.4",
