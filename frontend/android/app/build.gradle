@@ -1,5 +1,22 @@
 apply plugin: 'com.android.application'
 
+// --- Release signing (see docs/ANDROID_RELEASE.md for the full
+// walkthrough) ---
+// Reads from android/keystore.properties, which is gitignored and
+// created locally by whoever cuts a release -- never committed,
+// never hardcoded here. If that file doesn't exist (e.g. a fresh
+// clone, CI without secrets configured, or just running a debug
+// build), signingConfigs.release silently stays unset and only
+// `assembleDebug`/`bundleDebug` work -- assembleRelease/bundleRelease
+// will fail with a clear Gradle error instead of silently producing
+// an unsigned artifact.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasKeystoreConfig = keystorePropertiesFile.exists()
+if (hasKeystoreConfig) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.focusforge.ai"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +33,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasKeystoreConfig) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasKeystoreConfig) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
