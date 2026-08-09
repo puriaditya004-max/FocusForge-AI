@@ -2,19 +2,18 @@ import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
+import { useFocusDetection } from "../hooks/useFocusDetection";
 import { Camera, Play, Pause, RotateCcw, Timer } from "lucide-react";
 
 // ---------------------------------------------------------
 // FocusMode Page
 // Full-page version of the dashboard's "Focus Mode (Camera)"
 // card. Turns on the webcam, lets the user start/pause a
-// focus session, tracks session time, and shows a basic
-// focus/distraction status.
-//
-// NOTE: Just like FocusTracker.jsx, `isFocused` here is a
-// placeholder until the real AI model from
-// ai-engine/focus-detection is wired in. Replace the
-// placeholder logic (marked below) once that's ready.
+// focus session, tracks session time, and shows a real
+// focus/distraction status from useFocusDetection (MediaPipe
+// FaceLandmarker running entirely in-browser — see
+// src/lib/focusDetection/). Nothing is uploaded anywhere;
+// detection runs on-device.
 // ---------------------------------------------------------
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -33,7 +32,6 @@ export default function FocusMode() {
   const videoRef = useRef(null);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [error, setError] = useState(null);
-  const [isFocused, setIsFocused] = useState(true); // placeholder until AI model is connected
 
   const [subject, setSubject] = useState(SUBJECTS[0]);
   const [isSessionRunning, setIsSessionRunning] = useState(false);
@@ -43,6 +41,20 @@ export default function FocusMode() {
   const [sessionStartedAt, setSessionStartedAt] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+
+  const { isFocused, isModelLoading, modelError, lastAlert } = useFocusDetection(videoRef, {
+    enabled: isCameraOn && !error,
+  });
+
+  // Every CONFIRMED alert (already debounced + cooldown'd inside
+  // the hook) counts as one distraction, but only while a session
+  // is actually running — a distraction detected while the camera
+  // is just idling on the page shouldn't count against the student.
+  useEffect(() => {
+    if (!lastAlert || !isSessionRunning) return;
+    setDistractions((d) => d + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastAlert]);
 
   // Start camera once on mount
   useEffect(() => {
@@ -81,22 +93,8 @@ export default function FocusMode() {
     return () => clearInterval(interval);
   }, [isSessionRunning, isFocused]);
 
-  // Placeholder distraction simulation — remove once real
-  // AI focus-detection model is connected. It randomly
-  // toggles focus state so the UI has something to show.
-  useEffect(() => {
-    if (!isSessionRunning) return;
-    const interval = setInterval(() => {
-      setIsFocused((prev) => {
-        const next = Math.random() > 0.15; // mostly focused
-        if (prev && !next) {
-          setDistractions((d) => d + 1);
-        }
-        return next;
-      });
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [isSessionRunning]);
+  // Placeholder distraction simulation removed — isFocused now comes
+  // from useFocusDetection above (real MediaPipe-based detection).
 
   const focusPercent =
     seconds > 0 ? Math.round((focusedSeconds / seconds) * 100) : 100;
@@ -206,12 +204,23 @@ export default function FocusMode() {
               {isCameraOn && !error && (
                 <p
                   className={`mt-3 text-sm text-center ${
-                    isFocused ? "text-green-400" : "text-orange-400"
+                    isModelLoading
+                      ? "text-gray-400"
+                      : isFocused
+                      ? "text-green-400"
+                      : "text-orange-400"
                   }`}
                 >
-                  {isFocused
+                  {isModelLoading
+                    ? "Loading focus detection model…"
+                    : isFocused
                     ? "You are in focus zone ✅"
                     : "Distraction detected ⚠️"}
+                </p>
+              )}
+              {modelError && (
+                <p className="mt-2 text-xs text-red-400 text-center">
+                  Focus detection unavailable: {modelError}. Session timer still works normally.
                 </p>
               )}
 
@@ -293,8 +302,8 @@ export default function FocusMode() {
               </div>
 
               <p className="text-xs text-gray-500 mt-auto">
-                Note: focus/distraction detection is placeholder data for now.
-                Real AI tracking will connect from ai-engine/focus-detection.
+                Focus detection runs entirely in your browser (on-device) — no
+                video is ever uploaded anywhere.
               </p>
             </section>
           </div>
