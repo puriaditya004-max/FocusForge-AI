@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useFocusDetection } from "../hooks/useFocusDetection";
 
 // ---------------------------------------------------------
 // FocusTracker
@@ -6,19 +7,21 @@ import React, { useEffect, useRef, useState } from "react";
 // a card, similar to the "Focus Mode (Camera)" box in the
 // dashboard design.
 //
-// NOTE: This file only handles the CAMERA UI (getting video
-// from the webcam and displaying it). The actual AI model
-// that detects whether the user is focused or distracted
-// will be plugged in later inside ai-engine/focus-detection.
-// For now `isFocused` is a placeholder state you can wire up
-// once that model is ready.
+// isFocused comes from useFocusDetection (MediaPipe FaceLandmarker
+// running in-browser — see src/lib/focusDetection/). This is a
+// lightweight preview card (no session/distraction tracking, no
+// backend calls) -- the full session experience with saved stats
+// lives in pages/FocusMode.jsx, which uses the same hook.
 // ---------------------------------------------------------
 
 export default function FocusTracker() {
   const videoRef = useRef(null);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [error, setError] = useState(null);
-  const [isFocused, setIsFocused] = useState(true); // placeholder until AI model is connected
+
+  const { isFocused, isModelLoading } = useFocusDetection(videoRef, {
+    enabled: isCameraOn && !error,
+  });
 
   useEffect(() => {
     let stream;
@@ -75,10 +78,14 @@ export default function FocusTracker() {
       {isCameraOn && !error && (
         <p
           className={`mt-2 text-sm text-center ${
-            isFocused ? "text-green-400" : "text-orange-400"
+            isModelLoading ? "text-gray-400" : isFocused ? "text-green-400" : "text-orange-400"
           }`}
         >
-          {isFocused ? "You are in focus zone ✅" : "Distraction detected ⚠️"}
+          {isModelLoading
+            ? "Loading focus detection model…"
+            : isFocused
+            ? "You are in focus zone ✅"
+            : "Distraction detected ⚠️"}
         </p>
       )}
     </div>
