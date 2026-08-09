@@ -55,6 +55,8 @@
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
 const { decrypt } = require("../utils/crypto");
+const { isUnsafeAiOutput, SAFE_FALLBACK_REPLY } = require("../utils/aiSafety");
+const { recordGeminiCall } = require("../utils/aiUsage");
 
 const GEMINI_MODEL = "gemini-2.5-flash"; // gemini-2.0-flash was moved to a 0-quota free tier bucket by Google — use 2.5
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001"; // cheapest Claude model, good fit for BYOK chat
@@ -85,6 +87,19 @@ async function callGemini(systemPrompt, historyMessages, file) {
     };
   });
 
+  // Gemini's own content classifier — the primary safety layer (see
+  // utils/aiSafety.js for the full explanation of why there are two
+  // layers). BLOCK_MEDIUM_AND_ABOVE stops clearly unsafe content
+  // without being so aggressive it blocks normal study questions
+  // that happen to touch a sensitive topic (e.g. a history question
+  // about war, a biology question about anatomy).
+  const safetySettings = [
+    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  ];
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
@@ -93,8 +108,13 @@ async function callGemini(systemPrompt, historyMessages, file) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents,
+      safetySettings,
     }),
   });
+
+  // Counts against the shared free-tier quota whether or not the
+  // call ultimately succeeds, so record it either way.
+  recordGeminiCall();
 
   if (!response.ok) {
     const errText = await response.text();
@@ -102,6 +122,19 @@ async function callGemini(systemPrompt, historyMessages, file) {
   }
 
   const data = await response.json();
+
+  // A safety block looks different from a normal empty response —
+  // there's a blockReason (whole prompt blocked) or the candidate's
+  // finishReason is "SAFETY" (the model started generating and got
+  // cut off) instead of a parsing/network failure. Treat this as an
+  // expected, handled case with a friendly reply — not a 500 error.
+  const blockReason = data?.promptFeedback?.blockReason;
+  const finishReason = data?.candidates?.[0]?.finishReason;
+  if (blockReason || finishReason === "SAFETY") {
+    logger.warn("Gemini blocked a response for safety:", { blockReason, finishReason });
+    return SAFE_FALLBACK_REPLY;
+  }
+
   const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!reply) {
@@ -165,7 +198,7 @@ async function callMentorModel(user, systemPrompt, historyForApi, file) {
 
   if (file) {
     replyText = await callGemini(systemPrompt, historyForApi, file);
-    return { text: replyText, usedFallback: false };
+    return { text: applyOutputSafety(replyText), usedFallback: false };
   }
 
   if (user.mentorApiKey) {
@@ -177,7 +210,7 @@ async function callMentorModel(user, systemPrompt, historyForApi, file) {
       logger.error("mentorApiKey failed to decrypt for user, falling back to Gemini", { userId: user.id });
       replyText = await callGemini(systemPrompt, historyForApi, null);
       usedFallback = true;
-      return { text: replyText, usedFallback };
+      return { text: applyOutputSafety(replyText), usedFallback };
     }
     try {
       replyText = await callClaude(plainKey, systemPrompt, historyForApi);
@@ -190,8 +223,22 @@ async function callMentorModel(user, systemPrompt, historyForApi, file) {
     replyText = await callGemini(systemPrompt, historyForApi, null);
   }
 
-  return { text: replyText, usedFallback };
+  return { text: applyOutputSafety(replyText), usedFallback };
 }
+
+// Backstop layer 2 (see utils/aiSafety.js) — runs on every reply
+// this function returns, regardless of which branch/provider
+// produced it. This is the single choke point all three AI-facing
+// endpoints (sendMessage, handleVoiceCommand, generateQuiz) go
+// through, so putting the check here covers all of them at once.
+function applyOutputSafety(text) {
+  if (isUnsafeAiOutput(text)) {
+    logger.error("AI Mentor output blocked by safety backstop (pattern match) — reply withheld from student.");
+    return SAFE_FALLBACK_REPLY;
+  }
+  return text;
+}
+
 
 // ---------------------------------------------------------
 // Build the mentor's personality/context prompt.
