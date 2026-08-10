@@ -34,6 +34,10 @@ async function getOverview(req, res) {
       where: { id: teacherId },
       select: { teacherVerificationStatus: true, teacherVerifiedAt: true, razorpayRouteAccountId: true },
     });
+    const verification = await prisma.teacherVerification.findUnique({
+      where: { teacherId },
+      select: { status: true, reviewerNotes: true, reviewedAt: true, submittedAt: true },
+    });
 
     const courses = await prisma.course.findMany({
       where: { teacherId },
@@ -91,6 +95,9 @@ async function getOverview(req, res) {
     return res.json({
       verificationStatus: teacher?.teacherVerificationStatus || "NOT_SUBMITTED",
       teacherVerifiedAt: teacher?.teacherVerifiedAt,
+      verificationReviewerNotes: verification?.reviewerNotes || null,
+      verificationReviewedAt: verification?.reviewedAt || null,
+      verificationSubmittedAt: verification?.submittedAt || null,
       razorpayRouteAccountId: teacher?.razorpayRouteAccountId,
       totalCourses: courses.length,
       totalStudents: uniqueApprovedStudentIds.size,
@@ -163,12 +170,23 @@ async function listCourseVideos(req, res) {
   }
 }
 
+async function requireApprovedTeacher(teacherId) {
+  const teacher = await prisma.user.findUnique({
+    where: { id: teacherId },
+    select: { teacherVerificationStatus: true },
+  });
+  return teacher?.teacherVerificationStatus === "APPROVED";
+}
+
 async function addCourseVideo(req, res) {
   try {
     const teacherId = req.user.userId;
     const { courseId } = req.params;
     const course = await prisma.course.findFirst({ where: { id: courseId, teacherId } });
     if (!course) return res.status(404).json({ error: "Course not found." });
+    if (!(await requireApprovedTeacher(teacherId))) {
+      return res.status(403).json({ error: "Teacher verification must be approved before adding course videos." });
+    }
 
     let videoUrl = req.body.videoUrl;
     let storageKey = null;
@@ -213,6 +231,10 @@ async function uploadCourseVideo(req, res) {
     if (!course) {
       if (req.file) fs.unlink(req.file.path, () => {}); // don't leave orphaned files for a course that isn't theirs
       return res.status(404).json({ error: "Course not found." });
+    }
+    if (!(await requireApprovedTeacher(teacherId))) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(403).json({ error: "Teacher verification must be approved before uploading course videos." });
     }
 
     if (!req.file) {
