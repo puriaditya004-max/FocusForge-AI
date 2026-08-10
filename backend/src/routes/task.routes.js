@@ -3,6 +3,7 @@
 // ---------------------------------------------------------
 const express = require("express");
 const { requireAuth } = require("../middleware/auth.middleware");
+const { requirePremiumAccess } = require("../middleware/subscription.middleware");
 const validate = require("../middleware/validate.middleware");
 const { createTaskSchema, updateTaskSchema } = require("../validators/task.validator");
 const {
@@ -20,10 +21,10 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get("/", getTasks);
-router.post("/", validate(createTaskSchema), createTask);
-router.patch("/:id/toggle", toggleTask);
-router.patch("/:taskId/subtasks/:subId/toggle", toggleSubtask);
-router.patch("/:id", validate(updateTaskSchema), updateTask);
-router.delete("/:id", deleteTask);
+router.post("/", requirePremiumAccess, validate(createTaskSchema), createTask);
+router.patch("/:id/toggle", requirePremiumAccess, toggleTask);
+router.patch("/:taskId/subtasks/:subId/toggle", requirePremiumAccess, toggleSubtask);
+router.patch("/:id", requirePremiumAccess, validate(updateTaskSchema), updateTask);
+router.delete("/:id", requirePremiumAccess, deleteTask);
 
 module.exports = router;
