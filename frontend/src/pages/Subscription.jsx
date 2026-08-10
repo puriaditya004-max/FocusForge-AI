@@ -9,6 +9,7 @@ import {
   CreditCard,
   Crown,
   Loader2,
+  ReceiptText,
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
@@ -42,6 +43,21 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function formatDateTime(value) {
+  if (!value) return "Not set";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatMoney(paise, currency = "INR") {
+  return ((paise || 0) / 100).toLocaleString("en-IN", { style: "currency", currency });
+}
+
 function loadRazorpayCheckout() {
   return new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve(true);
@@ -59,6 +75,7 @@ export default function Subscription() {
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [plans, setPlans] = useState({});
+  const [payments, setPayments] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [workingPlan, setWorkingPlan] = useState("");
@@ -68,6 +85,7 @@ export default function Subscription() {
 
   useEffect(() => {
     fetchSubscription();
+    fetchPayments();
   }, []);
 
   async function fetchSubscription() {
@@ -83,6 +101,17 @@ export default function Subscription() {
       setError(err.message || "Failed to load subscription.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchPayments() {
+    try {
+      const res = await fetch(`${API_BASE}/subscription/payments`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load payment history.");
+      setPayments(data.payments || []);
+    } catch (err) {
+      setError(err.message || "Failed to load payment history.");
     }
   }
 
@@ -193,6 +222,7 @@ export default function Subscription() {
       });
 
       await fetchSubscription();
+      await fetchPayments();
       setMessage("Subscription activated successfully.");
     } catch (err) {
       if (err.code === "PAYMENT_CANCELLED") {
@@ -217,6 +247,7 @@ export default function Subscription() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to cancel subscription.");
       setSubscription(data.subscription);
+      await fetchPayments();
       setMessage(data.message || "Subscription cancelled.");
     } catch (err) {
       setError(err.message || "Failed to cancel subscription.");
@@ -348,6 +379,60 @@ export default function Subscription() {
                   );
                 })}
               </div>
+
+              <section className="bg-[#13131f] border border-white/5 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2">
+                      <ReceiptText size={16} className="text-purple-300" /> Payment History
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">Latest subscription checkout attempts and receipts.</p>
+                  </div>
+                  <button
+                    onClick={fetchPayments}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:bg-white/5"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-gray-500 p-5">No subscription payments yet.</p>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {payments.map((payment) => {
+                      const statusClassName =
+                        payment.status === "PAID"
+                          ? "bg-green-500/10 text-green-300 border-green-500/20"
+                          : payment.status === "CREATED"
+                            ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/20"
+                            : "bg-red-500/10 text-red-300 border-red-500/20";
+
+                      return (
+                        <div key={payment.id} className="px-5 py-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-100">{payment.plan}</p>
+                              <span className={`text-[10px] px-2 py-1 rounded-full border ${statusClassName}`}>
+                                {payment.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatDateTime(payment.paidAt || payment.createdAt)} · {payment.receipt}
+                            </p>
+                            <div className="mt-2 grid gap-1 text-[10px] text-gray-500">
+                              <span className="font-mono truncate">Order: {payment.razorpayOrderId}</span>
+                              <span className="font-mono truncate">Payment: {payment.razorpayPaymentId || "Not captured"}</span>
+                            </div>
+                          </div>
+                          <p className="text-base font-semibold text-green-300 md:text-right">
+                            {formatMoney(payment.amountPaise, payment.currency)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
 
               <section className="bg-white/5 border border-white/10 rounded-2xl p-5">
                 <h2 className="text-sm font-semibold flex items-center gap-2 mb-2">
