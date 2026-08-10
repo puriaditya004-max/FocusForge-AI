@@ -1,56 +1,39 @@
 // ---------------------------------------------------------
-// roadmap.controller.js — Smart Timetable / 25-week curriculum
+// roadmap.controller.js — Smart Timetable
 // ---------------------------------------------------------
-// The curriculum content itself is fixed (same for every
-// student). What's dynamic per-user is only the `status`
-// of each week (UPCOMING / IN_PROGRESS / COMPLETED).
+// v2 — AI-Generated Smart Timetable:
+//   Previously every student got the SAME fixed 25-week
+//   AIML/Software-Engineer curriculum, auto-seeded on first
+//   visit. That's now removed — a student's Smart Timetable
+//   starts EMPTY until they generate one via
+//   POST /api/roadmap/generate (student types or speaks a
+//   request like "2 month plan for NEET Biology" and Gemini
+//   builds a real, on-syllabus week-by-week plan).
+//   Regenerating REPLACES the student's current plan.
 //
-// On first fetch, if a user has no roadmap items yet, we
-// auto-seed all 25 weeks for them (one time only).
+//   GET /api/roadmap/suggest-today (used by Today's Plan) picks
+//   topics from the student's current plan to fill a target
+//   number of study hours. This is a deterministic, rule-based
+//   picker (NOT an LLM call) — instant, free, 100% reliable.
+//   Swapping in real AI-ranked suggestions later (e.g.
+//   prioritizing weak topics from getWeaknessReport) is a
+//   drop-in change to pickTopicsForToday() below.
 // ---------------------------------------------------------
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { recordGeminiCall } = require("../utils/aiUsage");
+const { isUnsafeAiOutput, SAFE_FALLBACK_REPLY } = require("../utils/aiSafety");
 
-// Master curriculum data — same for every student.
-// This mirrors the `weeklyPlan` array from Timetable.jsx.
-const CURRICULUM = [
-  { week: 1, monthNumber: 1, monthLabel: "Month 1 – Python & Basics", title: "Python Setup, Syntax, Variables, Data Types, Operators, Input/Output", tools: "Python", hours: "6-8 Hrs", project: "Simple Calculator" },
-  { week: 2, monthNumber: 1, monthLabel: "Month 1 – Python & Basics", title: "Lists, Tuples, Sets, Dictionaries, Conditions, Loops", tools: "Python", hours: "6-8 Hrs", project: "To-Do List App" },
-  { week: 3, monthNumber: 1, monthLabel: "Month 1 – Python & Basics", title: "Functions, Recursion, Lambda, Modules, File Handling", tools: "Python", hours: "6-8 Hrs", project: "File Organizer" },
-  { week: 4, monthNumber: 1, monthLabel: "Month 1 – Python & Basics", title: "OOP (Classes, Objects, Inheritance, Polymorphism)", tools: "Python", hours: "6-8 Hrs", project: "OOP Based App" },
-  { week: 5, monthNumber: 1, monthLabel: "Month 1 – Python & Basics", title: "Numpy Basics, Pandas Basics, Matplotlib, Seaborn", tools: "NumPy, Pandas, Matplotlib, Seaborn", hours: "6-8 Hrs", project: "Data Analysis (EDA)" },
-
-  { week: 6, monthNumber: 2, monthLabel: "Month 2 – Machine Learning", title: "Statistics (Mean, Median, Mode, Variance, Prob.)", tools: "Maths + Python", hours: "6-8 Hrs", project: "Statistics Calculator" },
-  { week: 7, monthNumber: 2, monthLabel: "Month 2 – Machine Learning", title: "Data Preprocessing (Missing Data, Encoding, Scaling, Normalization)", tools: "Pandas, Sklearn", hours: "6-8 Hrs", project: "Data Cleaning App" },
-  { week: 8, monthNumber: 2, monthLabel: "Month 2 – Machine Learning", title: "Linear Regression (Simple & Multiple)", tools: "Sklearn", hours: "6-8 Hrs", project: "House Price Prediction" },
-  { week: 9, monthNumber: 2, monthLabel: "Month 2 – Machine Learning", title: "Logistic Regression, KNN, Decision Tree", tools: "Sklearn", hours: "6-8 Hrs", project: "Classification Project" },
-  { week: 10, monthNumber: 2, monthLabel: "Month 2 – Machine Learning", title: "Random Forest, SVM, Model Evaluation, Cross Validation", tools: "Sklearn", hours: "6-8 Hrs", project: "ML Model Comparison" },
-
-  { week: 11, monthNumber: 3, monthLabel: "Month 3 – Deep Learning", title: "Introduction to Neural Networks", tools: "TensorFlow / Keras", hours: "6-8 Hrs", project: "ANN Model" },
-  { week: 12, monthNumber: 3, monthLabel: "Month 3 – Deep Learning", title: "CNN (Convolution Neural Network)", tools: "TensorFlow / Keras", hours: "6-8 Hrs", project: "Image Classifier" },
-  { week: 13, monthNumber: 3, monthLabel: "Month 3 – Deep Learning", title: "RNN & LSTM Basics", tools: "TensorFlow / Keras", hours: "6-8 Hrs", project: "Text Prediction" },
-  { week: 14, monthNumber: 3, monthLabel: "Month 3 – Deep Learning", title: "Model Training, Hyperparameter Tuning", tools: "TensorFlow / Keras", hours: "6-8 Hrs", project: "Improved Model" },
-  { week: 15, monthNumber: 3, monthLabel: "Month 3 – Deep Learning", title: "Model Deployment (Saving, Loading, Flask Basics)", tools: "Flask, Python", hours: "6-8 Hrs", project: "Deployed Model" },
-
-  { week: 16, monthNumber: 4, monthLabel: "Month 4 – AI Advanced & GenAI", title: "NLP Basics (Text Processing, Tokenization)", tools: "NLTK, SpaCy", hours: "6-8 Hrs", project: "Text Analyzer" },
-  { week: 17, monthNumber: 4, monthLabel: "Month 4 – AI Advanced & GenAI", title: "Transformers Basics (BERT, GPT)", tools: "Hugging Face", hours: "6-8 Hrs", project: "Sentiment Analysis" },
-  { week: 18, monthNumber: 4, monthLabel: "Month 4 – AI Advanced & GenAI", title: "LLM Basics & Prompt Engineering", tools: "OpenAI API", hours: "6-8 Hrs", project: "AI Prompt App" },
-  { week: 19, monthNumber: 4, monthLabel: "Month 4 – AI Advanced & GenAI", title: "LangChain Basics", tools: "LangChain", hours: "6-8 Hrs", project: "Ask PDF Bot" },
-  { week: 20, monthNumber: 4, monthLabel: "Month 4 – AI Advanced & GenAI", title: "Final Project (AI + ML + Deployment)", tools: "All Combined", hours: "6-8 Hrs", project: "AI Assistant App" },
-
-  { week: 21, monthNumber: 5, monthLabel: "SE Month 1 – DSA & Basics", title: "DSA: Arrays, Strings, Linked Lists, Stacks, Queues, Trees, Sorting", tools: "Python / JS", hours: "6-8 Hrs", project: "LeetCode Practice" },
-
-  { week: 22, monthNumber: 6, monthLabel: "SE Month 2 – Web Development", title: "HTML, CSS, JavaScript, React.js Basics", tools: "HTML, CSS, JS, React", hours: "6-8 Hrs", project: "Portfolio Website" },
-  { week: 23, monthNumber: 6, monthLabel: "SE Month 2 – Web Development", title: "React.js Advanced + Build Projects", tools: "React", hours: "6-8 Hrs", project: "React App" },
-
-  { week: 24, monthNumber: 7, monthLabel: "SE Month 3 – Backend", title: "Node.js / Express.js, MongoDB + SQL, REST API, Authentication", tools: "Node.js, MongoDB", hours: "6-8 Hrs", project: "Full Stack App" },
-  { week: 25, monthNumber: 7, monthLabel: "SE Month 3 – Backend", title: "Git & GitHub, Deployment (Vercel/Render), Postman, System Design", tools: "Git, Vercel", hours: "6-8 Hrs", project: "Deployed Full Stack Project" },
-];
+const GEMINI_MODEL = "gemini-2.5-flash";
+const MAX_WEEKS = 24; // ~6 months — caps token cost & keeps generation reliable
+const DEFAULT_WEEKS = 8;
+const DEFAULT_SESSION_MINUTES = 90; // used by suggestToday's greedy picker
 
 // Helper: reshape a Prisma roadmap item -> frontend format
 const formatItem = (item) => ({
   week: item.weekNumber,
   month: item.monthLabel,
+  monthNumber: item.monthNumber,
   topic: item.title,
   tools: item.tools || "",
   hours: item.hours || "",
@@ -58,39 +41,19 @@ const formatItem = (item) => ({
   status: item.status,
 });
 
+// ---------------------------------------------------------
 // GET /api/roadmap
-// Returns all 25 weeks for the logged-in user.
-// Auto-seeds the curriculum on first-ever fetch for that user.
+// Returns the student's current plan (possibly empty — the
+// frontend shows a "generate your first plan" prompt in that
+// case; this no longer auto-seeds a fixed curriculum).
+// ---------------------------------------------------------
 const getRoadmap = async (req, res) => {
   try {
     const userId = req.user.userId;
-
-    let items = await prisma.roadmapItem.findMany({
+    const items = await prisma.roadmapItem.findMany({
       where: { userId },
       orderBy: { weekNumber: "asc" },
     });
-
-    // First time this user is opening Smart Timetable — seed it
-    if (items.length === 0) {
-      await prisma.roadmapItem.createMany({
-        data: CURRICULUM.map((c) => ({
-          userId,
-          weekNumber: c.week,
-          monthNumber: c.monthNumber,
-          monthLabel: c.monthLabel,
-          title: c.title,
-          tools: c.tools,
-          hours: c.hours,
-          project: c.project,
-        })),
-      });
-
-      items = await prisma.roadmapItem.findMany({
-        where: { userId },
-        orderBy: { weekNumber: "asc" },
-      });
-    }
-
     res.status(200).json(items.map(formatItem));
   } catch (err) {
     logger.error("getRoadmap error:", err);
@@ -98,8 +61,9 @@ const getRoadmap = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------
 // PATCH /api/roadmap/:week/status
-// Updates the status of a single week (UPCOMING / IN_PROGRESS / COMPLETED)
+// ---------------------------------------------------------
 const updateWeekStatus = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -130,7 +94,199 @@ const updateWeekStatus = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------
+// AI generation — POST /api/roadmap/generate
+// ---------------------------------------------------------
+async function callGeminiForPlan(systemPrompt, userPrompt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY missing in .env");
+  }
+
+  const safetySettings = [
+    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  ];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      safetySettings,
+    }),
+  });
+
+  recordGeminiCall();
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+
+  const blockReason = data?.promptFeedback?.blockReason;
+  const finishReason = data?.candidates?.[0]?.finishReason;
+  if (blockReason || finishReason === "SAFETY") {
+    logger.warn("Gemini blocked a roadmap generation for safety:", { blockReason, finishReason });
+    return null;
+  }
+
+  const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!reply) {
+    throw new Error("Gemini returned an empty response");
+  }
+  return reply;
+}
+
+function safeParsePlanJson(raw) {
+  try {
+    const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (!Array.isArray(parsed.weeks)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function generateRoadmap(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { prompt } = req.body;
+
+    const systemPrompt = `You are Forge AI's Smart Timetable generator inside FocusForge AI, a student self-study app used in India.
+A student describes, in their own words, what study plan they want. Turn it into a week-by-week study plan.
+
+Rules:
+- If the student did not mention a duration, use ${DEFAULT_WEEKS} weeks.
+- Never plan more than ${MAX_WEEKS} weeks even if asked for longer.
+- If the student did not mention daily study hours, use "6-8 Hrs".
+- Group weeks into logical phases ("months") and give each phase a short name.
+- Stay strictly on-syllabus for the stated subject/exam (real NCERT/board/NEET/JEE-aligned topics, or real topics for the stated professional course — never invent unrelated topics).
+- Every week needs one concrete, specific topic — not vague filler.
+
+Respond with ONLY this exact JSON shape, nothing else, no markdown fences, no commentary:
+{"topic":"<short 2-6 word plan name>","weeks":[{"week":1,"monthNumber":1,"monthLabel":"<Topic> — Month 1: <phase name>","title":"<specific topic for this week>","tools":"<resources/tools for this week>","hours":"<daily hours, e.g. 6-8 Hrs>","goal":"<one concrete weekly milestone>"}]}`;
+
+    const rawReply = await callGeminiForPlan(systemPrompt, prompt.trim());
+
+    if (rawReply === null) {
+      return res.status(200).json({
+        error: "That request couldn't be processed safely — please rephrase and try again.",
+      });
+    }
+
+    const parsed = safeParsePlanJson(rawReply);
+    if (!parsed || parsed.weeks.length === 0) {
+      return res.status(502).json({
+        error: "Forge AI couldn't generate a valid plan this time — please try again, maybe with a simpler request.",
+      });
+    }
+
+    const combinedText = parsed.weeks
+      .map((w) => `${w.title || ""} ${w.tools || ""} ${w.goal || ""}`)
+      .join(" ");
+    if (isUnsafeAiOutput(combinedText)) {
+      logger.warn("generateRoadmap: AI output flagged by safety filter", { userId });
+      return res.status(200).json({ error: SAFE_FALLBACK_REPLY });
+    }
+
+    const topic = String(parsed.topic || "Your Plan").slice(0, 100);
+    const weeks = parsed.weeks.slice(0, MAX_WEEKS);
+
+    // Regenerating REPLACES the student's current plan
+    await prisma.roadmapItem.deleteMany({ where: { userId } });
+    await prisma.roadmapItem.createMany({
+      data: weeks.map((w, idx) => ({
+        userId,
+        weekNumber: idx + 1,
+        monthNumber: Number(w.monthNumber) || 1,
+        monthLabel: String(w.monthLabel || topic).slice(0, 200),
+        title: String(w.title || "Study session").slice(0, 300),
+        tools: w.tools ? String(w.tools).slice(0, 200) : null,
+        hours: w.hours ? String(w.hours).slice(0, 50) : "6-8 Hrs",
+        project: w.goal ? String(w.goal).slice(0, 200) : null,
+      })),
+    });
+
+    const items = await prisma.roadmapItem.findMany({
+      where: { userId },
+      orderBy: { weekNumber: "asc" },
+    });
+
+    return res.status(201).json({
+      topic,
+      weeks: items.map(formatItem),
+    });
+  } catch (err) {
+    logger.error("generateRoadmap error:", err);
+    return res.status(500).json({ error: "Could not generate your plan right now — please try again." });
+  }
+}
+
+// ---------------------------------------------------------
+// GET /api/roadmap/suggest-today?hours=6
+// Rule-based picker — see file header note above.
+// ---------------------------------------------------------
+function pickTopicsForToday(items, targetMinutes) {
+  const pending = items
+    .filter((i) => i.status !== "COMPLETED")
+    .sort((a, b) => a.weekNumber - b.weekNumber);
+
+  const picked = [];
+  let used = 0;
+  for (const item of pending) {
+    if (used >= targetMinutes || picked.length >= 8) break;
+    picked.push(item);
+    used += DEFAULT_SESSION_MINUTES;
+  }
+  return picked;
+}
+
+async function suggestToday(req, res) {
+  try {
+    const userId = req.user.userId;
+    const hours = Math.min(Math.max(Number(req.query.hours) || 4, 1), 12);
+    const targetMinutes = Math.round(hours * 60);
+
+    const items = await prisma.roadmapItem.findMany({
+      where: { userId },
+      orderBy: { weekNumber: "asc" },
+    });
+
+    if (items.length === 0) {
+      return res.status(200).json({
+        suggestions: [],
+        message: "Generate a Smart Timetable first — then Forge AI can suggest today's topics from it.",
+      });
+    }
+
+    const picked = pickTopicsForToday(items, targetMinutes);
+
+    const suggestions = picked.map((item) => ({
+      title: item.title,
+      subject: item.monthLabel,
+      duration: `${DEFAULT_SESSION_MINUTES} min`,
+      priority: "Medium",
+    }));
+
+    res.status(200).json({ suggestions });
+  } catch (err) {
+    logger.error("suggestToday error:", err);
+    res.status(500).json({ message: "Could not suggest a plan right now" });
+  }
+}
+
 module.exports = {
   getRoadmap,
   updateWeekStatus,
+  generateRoadmap,
+  suggestToday,
 };
