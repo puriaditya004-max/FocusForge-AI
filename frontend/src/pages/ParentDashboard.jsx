@@ -49,6 +49,8 @@ export default function ParentDashboard() {
   const [linkEmail, setLinkEmail] = useState("");
   const [linking, setLinking] = useState(false);
   const [linkMessage, setLinkMessage] = useState("");
+  const [goalDrafts, setGoalDrafts] = useState({});
+  const [savingGoalId, setSavingGoalId] = useState(null);
 
   useEffect(() => {
     fetchOverview();
@@ -75,6 +77,14 @@ export default function ParentDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load overview.");
       setChildren(data.children || []);
+      setGoalDrafts(
+        Object.fromEntries(
+          (data.children || []).map((child) => [
+            child.id,
+            child.parentMinDailyGoalHours ?? "",
+          ])
+        )
+      );
       setPendingRequests(data.pendingRequests || []);
       setSubscription(data.subscription || null);
       setFamilySeats(data.familySeats || { used: 0, limit: 3, available: 3 });
@@ -107,6 +117,29 @@ export default function ParentDashboard() {
       setLinkMessage(err.message);
     } finally {
       setLinking(false);
+    }
+  }
+
+  async function saveChildGoal(studentId) {
+    setSavingGoalId(studentId);
+    setError(null);
+    try {
+      const draft = goalDrafts[studentId];
+      const res = await fetch(`${API_BASE}/parent/children/${studentId}/goal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          minDailyGoalHours: draft === "" || draft === null ? null : Number(draft),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update goal.");
+      await fetchOverview();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingGoalId(null);
     }
   }
 
@@ -271,12 +304,48 @@ export default function ParentDashboard() {
                         </div>
                       </div>
 
+                      <div className="rounded-xl bg-white/5 border border-white/10 p-3 mb-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-400 mb-1">Parent minimum daily goal</p>
+                            <input
+                              type="number"
+                              min="1"
+                              max="16"
+                              value={goalDrafts[child.id] ?? ""}
+                              onChange={(e) => setGoalDrafts((prev) => ({ ...prev, [child.id]: e.target.value }))}
+                              placeholder="No minimum"
+                              className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                            />
+                          </div>
+                          <button
+                            onClick={() => saveChildGoal(child.id)}
+                            disabled={savingGoalId === child.id}
+                            className="bg-purple-600 hover:bg-purple-700 transition text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                          >
+                            {savingGoalId === child.id ? "Saving..." : "Save"}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-2">
+                          Student settings cannot go below this minimum while the parent link is approved.
+                        </p>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         <StatCard icon={Clock} label="Today" value={`${child.studyHoursToday}h`} />
                         <StatCard icon={BookOpen} label="This Week" value={`${child.studyHoursThisWeek}h`} />
                         <StatCard icon={Target} label="Tasks" value={`${child.tasksCompletedToday}/${child.tasksTotalToday}`} />
                         <StatCard icon={Activity} label="Focus" value={`${child.focusScoreThisWeek}%`} />
                       </div>
+
+                      {child.weeklyDigest && (
+                        <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3 mb-4">
+                          <p className="text-[11px] text-green-300 uppercase tracking-wider mb-1">Weekly Digest</p>
+                          <p className="text-xs text-gray-300">
+                            {child.weeklyDigest.studyHours}h studied · {child.weeklyDigest.sessions} focus sessions · {child.weeklyDigest.averageFocusScore}% avg focus
+                          </p>
+                        </div>
+                      )}
 
                       {child.currentFocus && (
                         <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-3 mb-4">
