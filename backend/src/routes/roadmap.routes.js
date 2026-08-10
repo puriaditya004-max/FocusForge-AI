@@ -5,11 +5,12 @@ const express = require("express");
 const { requireAuth } = require("../middleware/auth.middleware");
 const validate = require("../middleware/validate.middleware");
 const { aiDailyLimiter, aiBurstLimiter } = require("../middleware/rateLimiter.middleware");
-const { generateRoadmapSchema } = require("../validators/roadmap.validator");
+const { generateRoadmapSchema, importRoadmapSchema } = require("../validators/roadmap.validator");
 const {
   getRoadmap,
   updateWeekStatus,
   generateRoadmap,
+  importRoadmap,
   suggestToday,
 } = require("../controllers/roadmap.controller");
 
@@ -28,6 +29,15 @@ router.post(
   aiDailyLimiter,
   validate(generateRoadmapSchema),
   generateRoadmap
+);
+
+// POST /api/roadmap/import — import timetable from PDF/image
+router.post(
+  "/import",
+  aiBurstLimiter,
+  aiDailyLimiter,
+  validate(importRoadmapSchema),
+  importRoadmap
 );
 
 // GET /api/roadmap/suggest-today?hours=6 — rule-based topic picker for Today's Plan
