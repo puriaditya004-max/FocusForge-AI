@@ -16,6 +16,7 @@ import {
   PlayCircle,
   ReceiptText,
   RotateCcw,
+  ShieldCheck,
 } from "lucide-react";
 
 // ---------------------------------------------------------
@@ -311,9 +312,16 @@ export default function ClassesMarketplace() {
                   return (
                     <div key={c.id} className="bg-[#13131f] rounded-2xl p-5 border border-white/5 flex flex-col">
                       <h3 className="font-semibold mb-1">{c.title}</h3>
-                      <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
-                        <User2 size={12} /> {c.teacherName}
-                      </p>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-xs text-gray-500 flex items-center gap-1 min-w-0 truncate">
+                          <User2 size={12} /> {c.teacherName}
+                        </p>
+                        {c.teacherVerified && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-300 flex-shrink-0">
+                            <ShieldCheck size={11} /> Verified
+                          </span>
+                        )}
+                      </div>
                       {c.description && (
                         <p className="text-sm text-gray-400 mb-4 line-clamp-3">{c.description}</p>
                       )}
@@ -362,7 +370,14 @@ export default function ClassesMarketplace() {
                       </div>
                       <div>
                         <p className="font-medium text-sm">{c.title}</p>
-                        <p className="text-xs text-gray-500">by {c.teacherName} · {c.videoCount || 0} videos</p>
+                        <p className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">
+                          by {c.teacherName} · {c.videoCount || 0} videos
+                          {c.teacherVerified && (
+                            <span className="inline-flex items-center gap-1 text-green-300">
+                              · <ShieldCheck size={11} /> Verified Teacher
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
