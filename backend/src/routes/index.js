@@ -21,6 +21,7 @@ router.use("/parent", require("./parent.routes"));
 router.use("/marketplace", require("./marketplace.routes"));
 router.use("/teacher", require("./teacher.routes"));
 router.use("/payments", require("./payment.routes"));
+router.use("/subscription", require("./subscription.routes"));
 router.use("/admin", require("./admin.routes"));
 router.use("/digital-id", require("./digitalid.routes"));
 
