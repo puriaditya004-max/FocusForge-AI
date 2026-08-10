@@ -21,6 +21,7 @@ import {
   RotateCw,
   BadgeCheck,
   ReceiptText,
+  Crown,
 } from "lucide-react";
 
 // ---------------------------------------------------------
@@ -78,6 +79,8 @@ function StatusPill({ value }) {
   const tone =
     value === "PAID" || value === "ACTIVE" || value === "APPROVED"
       ? "bg-green-500/15 text-green-300 border-green-500/20"
+      : value === "TRIALING" || value === "GRACE"
+        ? "bg-purple-500/15 text-purple-300 border-purple-500/20"
       : value === "PENDING" || value === "CREATED" || value === "REQUESTED"
         ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/20"
         : "bg-red-500/15 text-red-300 border-red-500/20";
@@ -425,6 +428,44 @@ export default function AdminDashboard() {
                 <StatCard icon={Users} label="Active Enrollments" value={overview?.totalEnrollments ?? 0} />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
+                <StatCard
+                  icon={Crown}
+                  label="Active/Trial Subs"
+                  value={overview?.subscriptions?.activeOrTrialing ?? 0}
+                  tone="text-purple-300"
+                />
+                <StatCard
+                  icon={Clock3}
+                  label="Trial Users"
+                  value={overview?.subscriptions?.byStatus?.TRIALING ?? 0}
+                  tone="text-purple-300"
+                />
+                <StatCard
+                  icon={Crown}
+                  label="Family Plans"
+                  value={overview?.subscriptions?.byPlan?.FAMILY ?? 0}
+                  tone="text-green-300"
+                />
+                <StatCard
+                  icon={Users}
+                  label="Family Linked Students"
+                  value={overview?.subscriptions?.familyLinkedStudents ?? 0}
+                />
+                <StatCard
+                  icon={IndianRupee}
+                  label="Subscription Revenue"
+                  value={formatMoney(overview?.subscriptions?.totalRevenuePaise)}
+                  tone="text-green-400"
+                />
+                <StatCard
+                  icon={IndianRupee}
+                  label="Sub Revenue This Month"
+                  value={formatMoney(overview?.subscriptions?.monthlyRevenuePaise)}
+                  tone="text-purple-300"
+                />
+              </div>
+
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-6">
                 <section className="bg-[#13131f] rounded-xl border border-white/5 overflow-hidden">
                   <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
@@ -474,6 +515,59 @@ export default function AdminDashboard() {
                             <p className="text-sm font-semibold text-green-400">{formatMoney(p.amountPaise)}</p>
                             <StatusPill value={p.status} />
                           </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="bg-[#13131f] rounded-xl border border-white/5 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">Recent Subscription Payments</h2>
+                    <span className="text-[10px] text-gray-500">latest 8</span>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {(overview?.recentSubscriptionPayments || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 p-4">No subscription payments yet.</p>
+                    ) : (
+                      overview.recentSubscriptionPayments.map((p) => (
+                        <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-100 truncate">{p.userName}</p>
+                            <p className="text-xs text-gray-500 truncate">{p.userEmail} · {p.userRole}</p>
+                            <p className="text-[10px] text-gray-600 mt-0.5">
+                              {p.plan} · {formatDateTime(p.paidAt || p.createdAt)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <p className="text-sm font-semibold text-green-400">{formatMoney(p.amountPaise)}</p>
+                            <StatusPill value={p.status} />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="bg-[#13131f] rounded-xl border border-white/5 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">Subscription Access</h2>
+                    <span className="text-[10px] text-gray-500">latest 12</span>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {(overview?.recentSubscriptions || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 p-4">No subscriptions yet.</p>
+                    ) : (
+                      overview.recentSubscriptions.map((s) => (
+                        <div key={s.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-100 truncate">{s.userName}</p>
+                            <p className="text-xs text-gray-500 truncate">{s.userEmail} · {s.userRole}</p>
+                            <p className="text-[10px] text-gray-600 mt-0.5">
+                              {s.plan} · ends {formatDateTime(s.accessEndsAt)}
+                            </p>
+                          </div>
+                          <StatusPill value={s.status} />
                         </div>
                       ))
                     )}
