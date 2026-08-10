@@ -8,6 +8,7 @@ const {
   startTrial,
   createSubscriptionOrder,
   verifySubscriptionPayment,
+  markSubscriptionPaymentFailed,
 } = require("../controllers/subscription.controller");
 
 function requireStudentOrParent(req, res, next) {
@@ -39,5 +40,6 @@ router.post(
   createSubscriptionOrder
 );
 router.post("/verify", requireAuth, requireStudentOrParent, verifySubscriptionPayment);
+router.post("/fail", requireAuth, requireStudentOrParent, markSubscriptionPaymentFailed);
 
 module.exports = router;
