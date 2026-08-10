@@ -37,21 +37,39 @@ async function getOverview(req, res) {
 
     const courses = await prisma.course.findMany({
       where: { teacherId },
-      include: { enrollments: true, videos: true },
+      include: { enrollments: true, videos: true, payments: true },
       orderBy: { createdAt: "desc" },
     });
 
-    let totalEarnings = 0;
+    let grossRevenuePaise = 0;
+    let teacherEarningsPaise = 0;
+    let paidOutPaise = 0;
     const uniqueApprovedStudentIds = new Set();
     let pendingRequestCount = 0;
+    let paidPaymentCount = 0;
+    const payoutCounts = { NOT_READY: 0, ROUTE_PENDING: 0, ROUTE_LINKED: 0, PAID_OUT: 0, FAILED: 0 };
 
     const courseSummaries = courses.map((c) => {
       const approved = c.enrollments.filter((e) => e.status === "APPROVED");
       const pending = c.enrollments.filter((e) => e.status === "PENDING");
+      const paidPayments = c.payments.filter((p) => p.status === "PAID");
 
       approved.forEach((e) => uniqueApprovedStudentIds.add(e.studentId));
       pendingRequestCount += pending.length;
-      totalEarnings += c.price * approved.length;
+      paidPaymentCount += paidPayments.length;
+
+      const courseRevenuePaise = paidPayments.reduce((sum, p) => sum + (p.amountPaise || 0), 0);
+      const courseTeacherPaise = paidPayments.reduce((sum, p) => sum + (p.teacherAmountPaise || 0), 0);
+      const coursePaidOutPaise = paidPayments
+        .filter((p) => p.payoutStatus === "PAID_OUT")
+        .reduce((sum, p) => sum + (p.teacherAmountPaise || 0), 0);
+
+      grossRevenuePaise += courseRevenuePaise;
+      teacherEarningsPaise += courseTeacherPaise;
+      paidOutPaise += coursePaidOutPaise;
+      paidPayments.forEach((p) => {
+        payoutCounts[p.payoutStatus] = (payoutCounts[p.payoutStatus] || 0) + 1;
+      });
 
       return {
         id: c.id,
@@ -59,8 +77,12 @@ async function getOverview(req, res) {
         price: c.price,
         studentsEnrolled: approved.length,
         pendingRequests: pending.length,
-        earnings: c.price * approved.length,
+        paidPayments: paidPayments.length,
+        grossRevenuePaise: courseRevenuePaise,
+        teacherEarningsPaise: courseTeacherPaise,
+        paidOutPaise: coursePaidOutPaise,
         videoCount: c.videos.length,
+        previewVideoCount: c.videos.filter((v) => v.isPreview).length,
         published: c.published,
         createdAt: c.createdAt,
       };
@@ -72,7 +94,13 @@ async function getOverview(req, res) {
       razorpayRouteAccountId: teacher?.razorpayRouteAccountId,
       totalCourses: courses.length,
       totalStudents: uniqueApprovedStudentIds.size,
-      totalEarnings,
+      totalEarnings: +(teacherEarningsPaise / 100).toFixed(2),
+      grossRevenuePaise,
+      teacherEarningsPaise,
+      paidOutPaise,
+      pendingPayoutPaise: Math.max(teacherEarningsPaise - paidOutPaise, 0),
+      paidPaymentCount,
+      payoutCounts,
       pendingRequestCount,
       courses: courseSummaries,
     });
