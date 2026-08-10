@@ -7,3 +7,99 @@ body {
   font-family: "Inter", system-ui, sans-serif;
   background-color: #0b0b14;
 }
+
+:root {
+  color-scheme: dark;
+  --ff-bg: #0b0b14;
+  --ff-surface: #13131f;
+  --ff-surface-strong: #1a1a2e;
+  --ff-text: #f3f4f6;
+  --ff-muted: #9ca3af;
+  --ff-border: rgba(255, 255, 255, 0.08);
+  --ff-accent: #7c3aed;
+}
+
+:root.theme-bright {
+  color-scheme: light;
+  --ff-bg: #f7f8fb;
+  --ff-surface: #ffffff;
+  --ff-surface-strong: #eef2ff;
+  --ff-text: #111827;
+  --ff-muted: #4b5563;
+  --ff-border: rgba(15, 23, 42, 0.12);
+  --ff-accent: #2563eb;
+}
+
+:root.theme-dark {
+  color-scheme: dark;
+}
+
+:root.theme-purple {
+  color-scheme: dark;
+  --ff-bg: #12091f;
+  --ff-surface: #1b102d;
+  --ff-surface-strong: #25143d;
+  --ff-text: #faf5ff;
+  --ff-muted: #c4b5fd;
+  --ff-border: rgba(196, 181, 253, 0.18);
+  --ff-accent: #a855f7;
+}
+
+body {
+  background-color: var(--ff-bg);
+  color: var(--ff-text);
+}
+
+:root.theme-bright .bg-\[\#0b0b14\],
+:root.theme-bright .bg-\[\#0f0f1a\],
+:root.theme-purple .bg-\[\#0b0b14\],
+:root.theme-purple .bg-\[\#0f0f1a\] {
+  background-color: var(--ff-bg);
+}
+
+:root.theme-bright .bg-\[\#13131f\],
+:root.theme-bright .bg-\[\#1a1a2e\],
+:root.theme-bright .bg-\[\#1c1c2b\],
+:root.theme-purple .bg-\[\#13131f\],
+:root.theme-purple .bg-\[\#1a1a2e\],
+:root.theme-purple .bg-\[\#1c1c2b\] {
+  background-color: var(--ff-surface);
+}
+
+:root.theme-bright .text-white,
+:root.theme-bright .text-gray-100,
+:root.theme-bright .text-gray-200,
+:root.theme-bright .text-gray-300,
+:root.theme-purple .text-white,
+:root.theme-purple .text-gray-100 {
+  color: var(--ff-text);
+}
+
+:root.theme-bright .text-gray-400,
+:root.theme-bright .text-gray-500,
+:root.theme-bright .text-gray-600,
+:root.theme-purple .text-gray-400,
+:root.theme-purple .text-gray-500 {
+  color: var(--ff-muted);
+}
+
+:root.theme-bright .border-white\/5,
+:root.theme-bright .border-white\/10,
+:root.theme-purple .border-white\/5,
+:root.theme-purple .border-white\/10 {
+  border-color: var(--ff-border);
+}
+
+:root.theme-bright .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+
+:root.theme-bright .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.08);
+}
+
+:root.theme-purple .bg-purple-600,
+:root.theme-purple .bg-purple-500,
+:root.theme-purple .bg-violet-500 {
+  background-color: var(--ff-accent);
+}
