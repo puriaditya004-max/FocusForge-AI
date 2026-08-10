@@ -3,6 +3,7 @@
 // ---------------------------------------------------------
 const express = require("express");
 const { requireAuth } = require("../middleware/auth.middleware");
+const { requirePremiumAccess } = require("../middleware/subscription.middleware");
 const validate = require("../middleware/validate.middleware");
 const { aiDailyLimiter, aiBurstLimiter } = require("../middleware/rateLimiter.middleware");
 const { generateRoadmapSchema, importRoadmapSchema } = require("../validators/roadmap.validator");
@@ -25,6 +26,7 @@ router.patch("/:week/status", updateWeekStatus);
 // POST /api/roadmap/generate — AI Smart Timetable generator
 router.post(
   "/generate",
+  requirePremiumAccess,
   aiBurstLimiter,
   aiDailyLimiter,
   validate(generateRoadmapSchema),
@@ -34,6 +36,7 @@ router.post(
 // POST /api/roadmap/import — import timetable from PDF/image
 router.post(
   "/import",
+  requirePremiumAccess,
   aiBurstLimiter,
   aiDailyLimiter,
   validate(importRoadmapSchema),
@@ -41,6 +44,6 @@ router.post(
 );
 
 // GET /api/roadmap/suggest-today?hours=6 — rule-based topic picker for Today's Plan
-router.get("/suggest-today", suggestToday);
+router.get("/suggest-today", requirePremiumAccess, suggestToday);
 
 module.exports = router;
