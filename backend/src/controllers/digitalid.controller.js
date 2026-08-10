@@ -16,6 +16,7 @@
 const crypto = require("crypto");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { formatSubscription } = require("./subscription.controller");
 
 function generateCardNumber(role) {
   const prefix = role === "TEACHER" ? "TCH" : role === "PARENT" ? "PAR" : "STU";
@@ -34,7 +35,10 @@ function generateVerifyToken() {
 const getMyCard = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
+    });
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
@@ -85,6 +89,7 @@ const getMyCard = async (req, res) => {
         avatarUrl: user.avatarUrl,
         dateOfBirth: user.dateOfBirth,
       },
+      subscription: formatSubscription(user.subscription),
     });
   } catch (err) {
     logger.error("getMyCard error:", err);
@@ -105,7 +110,7 @@ const verifyCard = async (req, res) => {
 
     const card = await prisma.digitalId.findUnique({
       where: { verifyToken: token },
-      include: { user: { select: { name: true, role: true } } },
+      include: { user: { select: { name: true, role: true, subscription: true } } },
     });
 
     if (!card) {
@@ -127,6 +132,7 @@ const verifyCard = async (req, res) => {
       name: card.user.name,
       role: card.user.role,
       issuedAt: card.issuedAt,
+      subscription: formatSubscription(card.user.subscription),
     });
   } catch (err) {
     logger.error("verifyCard error:", err);
