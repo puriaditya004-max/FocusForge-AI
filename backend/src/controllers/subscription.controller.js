@@ -111,6 +111,21 @@ function formatSubscription(subscription) {
   };
 }
 
+function formatSubscriptionPayment(payment) {
+  return {
+    id: payment.id,
+    status: payment.status,
+    plan: payment.plan,
+    amountPaise: payment.amountPaise,
+    currency: payment.currency,
+    receipt: payment.receipt,
+    razorpayOrderId: payment.razorpayOrderId,
+    razorpayPaymentId: payment.razorpayPaymentId,
+    createdAt: payment.createdAt,
+    paidAt: payment.paidAt,
+  };
+}
+
 async function getInheritedFamilySubscription(userId) {
   const link = await prisma.studentParentLink.findFirst({
     where: {
@@ -257,6 +272,22 @@ async function getMySubscription(req, res) {
   } catch (err) {
     logger.error("getMySubscription error:", err);
     return res.status(500).json({ error: "Failed to load subscription." });
+  }
+}
+
+async function listMySubscriptionPayments(req, res) {
+  try {
+    const userId = req.user.userId;
+    const payments = await prisma.subscriptionPayment.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    return res.json({ payments: payments.map(formatSubscriptionPayment) });
+  } catch (err) {
+    logger.error("listMySubscriptionPayments error:", err);
+    return res.status(500).json({ error: "Failed to load subscription payments." });
   }
 }
 
@@ -426,6 +457,7 @@ module.exports = {
   formatSubscription,
   getEffectiveSubscriptionForUser,
   getMySubscription,
+  listMySubscriptionPayments,
   startTrial,
   createSubscriptionOrder,
   verifySubscriptionPayment,
