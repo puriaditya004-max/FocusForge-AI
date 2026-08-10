@@ -125,6 +125,24 @@ const updateSettings = async (req, res) => {
       return res.status(400).json({ message: "No valid fields to update" });
     }
 
+    if (data.dailyGoalHours !== undefined) {
+      const strictestParentGoal = await prisma.studentParentLink.findFirst({
+        where: {
+          studentId: userId,
+          status: "APPROVED",
+          minDailyGoalHours: { not: null },
+        },
+        orderBy: { minDailyGoalHours: "desc" },
+        select: { minDailyGoalHours: true },
+      });
+      const minGoal = strictestParentGoal?.minDailyGoalHours || 0;
+      const requestedGoal = Number(data.dailyGoalHours);
+      if (!Number.isFinite(requestedGoal)) {
+        return res.status(400).json({ message: "Daily goal must be a number" });
+      }
+      data.dailyGoalHours = Math.max(Math.round(requestedGoal), minGoal);
+    }
+
     const updated = await prisma.user.update({ where: { id: userId }, data });
     res.status(200).json(formatUser(updated));
   } catch (err) {
