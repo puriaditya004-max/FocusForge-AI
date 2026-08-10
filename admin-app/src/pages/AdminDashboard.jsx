@@ -563,6 +563,11 @@ export default function AdminDashboard() {
                             <p className="text-[10px] text-gray-600 mt-0.5">
                               {p.plan} · {formatDateTime(p.paidAt || p.createdAt)}
                             </p>
+                            <div className="mt-1 grid gap-0.5 text-[10px] text-gray-600">
+                              <span className="font-mono truncate">Receipt: {p.receipt}</span>
+                              <span className="font-mono truncate">Order: {p.razorpayOrderId}</span>
+                              <span className="font-mono truncate">Payment: {p.razorpayPaymentId || "Not captured"}</span>
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-1 flex-shrink-0">
                             <p className="text-sm font-semibold text-green-400">{formatMoney(p.amountPaise)}</p>
