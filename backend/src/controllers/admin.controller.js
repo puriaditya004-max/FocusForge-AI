@@ -7,9 +7,31 @@
 // ---------------------------------------------------------
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const {
+  addDays,
+  getAccessEndsAt,
+  getEffectiveSubscriptionStatus,
+} = require("../utils/subscriptionLifecycle");
+
+const GRACE_DAYS = Number(process.env.SUBSCRIPTION_GRACE_DAYS || 3);
+
+async function expireDueSubscriptions(now = new Date()) {
+  await prisma.subscription.updateMany({
+    where: {
+      status: { in: ["ACTIVE", "TRIALING"] },
+      OR: [
+        { graceEndsAt: { lt: now } },
+        { graceEndsAt: null, currentPeriodEnd: { lt: now } },
+      ],
+    },
+    data: { status: "EXPIRED" },
+  });
+}
 
 async function getAdminOverview(req, res) {
   try {
+    await expireDueSubscriptions();
+
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
@@ -27,6 +49,7 @@ async function getAdminOverview(req, res) {
       totalEnrollments,
       subscriptionsByStatus,
       subscriptionsByPlan,
+      subscriptionsInGrace,
       activeFamilyLinkedStudents,
       subscriptionRevenueAgg,
       monthlySubscriptionRevenueAgg,
@@ -48,6 +71,13 @@ async function getAdminOverview(req, res) {
       prisma.enrollment.count({ where: { status: "APPROVED" } }),
       prisma.subscription.groupBy({ by: ["status"], _count: { status: true } }),
       prisma.subscription.groupBy({ by: ["plan"], _count: { plan: true } }),
+      prisma.subscription.count({
+        where: {
+          status: { in: ["ACTIVE", "TRIALING"] },
+          currentPeriodEnd: { lt: new Date() },
+          graceEndsAt: { gte: new Date() },
+        },
+      }),
       prisma.studentParentLink.count({
         where: {
           status: "APPROVED",
@@ -155,6 +185,7 @@ async function getAdminOverview(req, res) {
       subscriptions: {
         byStatus: subscriptionStatusCounts,
         byPlan: subscriptionPlanCounts,
+        inGrace: subscriptionsInGrace,
         activeOrTrialing: subscriptionStatusCounts.ACTIVE + subscriptionStatusCounts.TRIALING,
         familyLinkedStudents: activeFamilyLinkedStudents,
         totalRevenuePaise: subscriptionRevenueAgg._sum.amountPaise || 0,
@@ -188,8 +219,9 @@ async function getAdminOverview(req, res) {
       recentSubscriptions: recentSubscriptions.map((s) => ({
         id: s.id,
         plan: s.plan,
-        status: s.status,
-        accessEndsAt: s.currentPeriodEnd || s.trialEndsAt,
+        status: getEffectiveSubscriptionStatus(s),
+        storedStatus: s.status,
+        accessEndsAt: getAccessEndsAt(s),
         graceEndsAt: s.graceEndsAt,
         updatedAt: s.updatedAt,
         userName: s.user?.name || "Unknown user",
@@ -226,6 +258,55 @@ async function listRefunds(req, res) {
   } catch (err) {
     logger.error("listRefunds error:", err);
     return res.status(500).json({ error: "Failed to load refund queue." });
+  }
+}
+
+async function updateSubscriptionAccess(req, res) {
+  try {
+    const { id } = req.params;
+    const action = String(req.body.action || "").toUpperCase();
+    const subscription = await prisma.subscription.findUnique({ where: { id } });
+    if (!subscription) return res.status(404).json({ error: "Subscription not found." });
+
+    if (action === "CANCEL") {
+      const now = new Date();
+      const cancelled = await prisma.subscription.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          currentPeriodEnd: now,
+          graceEndsAt: now,
+        },
+      });
+      return res.json({ message: "Subscription cancelled.", subscription: cancelled });
+    }
+
+    if (action === "EXTEND") {
+      const days = Number(req.body.days);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        return res.status(400).json({ error: "Extension days must be between 1 and 365." });
+      }
+
+      const now = new Date();
+      const accessEndsAt = getAccessEndsAt(subscription);
+      const baseDate = accessEndsAt && accessEndsAt > now ? accessEndsAt : now;
+      const currentPeriodEnd = addDays(baseDate, days);
+      const updated = await prisma.subscription.update({
+        where: { id },
+        data: {
+          status: "ACTIVE",
+          currentPeriodStart: subscription.currentPeriodStart || now,
+          currentPeriodEnd,
+          graceEndsAt: addDays(currentPeriodEnd, GRACE_DAYS),
+        },
+      });
+      return res.json({ message: `Subscription extended by ${days} days.`, subscription: updated });
+    }
+
+    return res.status(400).json({ error: "Choose a valid subscription action." });
+  } catch (err) {
+    logger.error("updateSubscriptionAccess error:", err);
+    return res.status(500).json({ error: "Failed to update subscription." });
   }
 }
 
@@ -316,4 +397,11 @@ async function listPayouts(req, res) {
   }
 }
 
-module.exports = { getAdminOverview, listRefunds, listStudyRoomReports, resolveStudyRoomReport, listPayouts };
+module.exports = {
+  getAdminOverview,
+  updateSubscriptionAccess,
+  listRefunds,
+  listStudyRoomReports,
+  resolveStudyRoomReport,
+  listPayouts,
+};
