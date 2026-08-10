@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
+import { applyTheme, normalizeTheme } from "../utils/theme";
 import {
   User,
   CalendarClock,
@@ -70,6 +71,27 @@ const journeyMilestones = [
 ];
 
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const themeOptions = [
+  {
+    id: "bright",
+    label: "Bright",
+    description: "Clean light mode for daytime study",
+    swatch: "bg-gray-100",
+  },
+  {
+    id: "dark",
+    label: "Dark",
+    description: "Low-glare mode for night sessions",
+    swatch: "bg-[#0b0b14]",
+  },
+  {
+    id: "purple",
+    label: "Purple",
+    description: "FocusForge brand mood",
+    swatch: "bg-purple-600",
+  },
+];
 
 const accentOptions = [
   { id: "purple", label: "Purple", swatch: "bg-purple-500" },
@@ -182,7 +204,8 @@ export default function Settings() {
         streakAlert: data.streakAlertOn,
         weeklySummary: data.weeklySummaryOn,
       });
-      setTheme(data.theme);
+      setTheme(normalizeTheme(data.theme));
+      applyTheme(data.theme);
       setAccent(data.accentColor);
       setLevel(data.level);
       setCurrentStreak(data.currentStreak);
@@ -219,6 +242,16 @@ export default function Settings() {
       setError(err.message || "Failed to save settings");
       setSaveStatus("");
       return null;
+    }
+  }
+
+  async function handleThemeChange(nextTheme) {
+    const normalized = applyTheme(nextTheme);
+    setTheme(normalized);
+    const data = await saveSettings({ theme: normalized });
+    if (data?.theme) {
+      setTheme(normalizeTheme(data.theme));
+      applyTheme(data.theme);
     }
   }
 
@@ -681,29 +714,26 @@ export default function Settings() {
                 >
                   <div className="mb-5">
                     <label className="text-[11px] text-gray-500 mb-2 block">Theme</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {["dark", "light"].map((t) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {themeOptions.map((option) => (
                         <button
-                          key={t}
-                          onClick={() => {
-                            setTheme(t);
-                            saveSettings({ theme: t });
-                          }}
-                          className={`flex items-center gap-2 p-3 rounded-xl border capitalize text-xs font-medium transition-all ${
-                            theme === t
+                          key={option.id}
+                          onClick={() => handleThemeChange(option.id)}
+                          className={`flex items-start gap-2 p-3 rounded-xl border text-left text-xs transition-all ${
+                            theme === option.id
                               ? "bg-purple-600/20 border-purple-500/40 text-purple-200"
                               : "bg-white/3 border-white/10 text-gray-400 hover:bg-white/5"
                           }`}
                         >
                           <span
-                            className={`w-4 h-4 rounded-full border border-white/20 ${
-                              t === "dark" ? "bg-[#0b0b14]" : "bg-gray-100"
-                            }`}
+                            className={`w-5 h-5 rounded-full border border-white/20 flex-shrink-0 ${option.swatch}`}
                           />
-                          {t}
-                          {t === "light" && (
-                            <span className="text-[9px] text-gray-500 ml-auto">Coming soon</span>
-                          )}
+                          <span>
+                            <span className="block font-medium text-gray-100">{option.label}</span>
+                            <span className="block text-[10px] text-gray-500 mt-0.5 leading-snug">
+                              {option.description}
+                            </span>
+                          </span>
                         </button>
                       ))}
                     </div>
