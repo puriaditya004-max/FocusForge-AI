@@ -1,0 +1,306 @@
+const crypto = require("crypto");
+const prisma = require("../config/db");
+const logger = require("../utils/logger");
+
+const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
+const TRIAL_DAYS = Number(process.env.SUBSCRIPTION_TRIAL_DAYS || 30);
+const GRACE_DAYS = Number(process.env.SUBSCRIPTION_GRACE_DAYS || 3);
+
+const PLAN_CONFIG = {
+  STUDENT_MONTHLY: {
+    label: "Student Monthly",
+    amountPaise: Number(process.env.STUDENT_MONTHLY_AMOUNT_PAISE || 19900),
+    durationDays: 30,
+  },
+  STUDENT_YEARLY: {
+    label: "Student Yearly",
+    amountPaise: Number(process.env.STUDENT_YEARLY_AMOUNT_PAISE || 149900),
+    durationDays: 365,
+  },
+  FAMILY: {
+    label: "Family Plan",
+    amountPaise: Number(process.env.FAMILY_MONTHLY_AMOUNT_PAISE || 29900),
+    durationDays: 30,
+  },
+};
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getRazorpayConfig() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    const err = new Error("Razorpay keys are not configured.");
+    err.status = 503;
+    throw err;
+  }
+  return { keyId, keySecret };
+}
+
+function timingSafeEqualHex(left, right) {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function verifyCheckoutSignature(orderId, paymentId, receivedSignature, keySecret) {
+  if (!orderId || !paymentId || !receivedSignature) return false;
+
+  const expected = crypto
+    .createHmac("sha256", keySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest("hex");
+
+  return timingSafeEqualHex(expected, receivedSignature);
+}
+
+function normalizePlan(plan) {
+  const safePlan = String(plan || "").toUpperCase();
+  return PLAN_CONFIG[safePlan] ? safePlan : null;
+}
+
+function effectiveStatus(subscription) {
+  if (!subscription) return "NONE";
+  if (subscription.status === "CANCELLED") return "CANCELLED";
+
+  const now = new Date();
+  const accessEndsAt = subscription.currentPeriodEnd || subscription.trialEndsAt;
+  if (accessEndsAt && accessEndsAt < now) {
+    if (subscription.graceEndsAt && subscription.graceEndsAt >= now) return "GRACE";
+    return "EXPIRED";
+  }
+  return subscription.status;
+}
+
+function formatSubscription(subscription) {
+  if (!subscription) {
+    return {
+      status: "NONE",
+      plan: null,
+      trialAvailable: true,
+      accessEndsAt: null,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      graceEndsAt: null,
+    };
+  }
+
+  return {
+    id: subscription.id,
+    plan: subscription.plan,
+    status: effectiveStatus(subscription),
+    storedStatus: subscription.status,
+    trialAvailable: false,
+    trialEndsAt: subscription.trialEndsAt,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    graceEndsAt: subscription.graceEndsAt,
+    accessEndsAt: subscription.currentPeriodEnd || subscription.trialEndsAt,
+    razorpaySubscriptionId: subscription.razorpaySubscriptionId,
+  };
+}
+
+async function ensureSubscription(userId) {
+  let subscription = await prisma.subscription.findUnique({ where: { userId } });
+  if (subscription) return subscription;
+
+  const now = new Date();
+  return prisma.subscription.create({
+    data: {
+      userId,
+      plan: "TRIAL",
+      status: "TRIALING",
+      trialStartedAt: now,
+      trialEndsAt: addDays(now, TRIAL_DAYS),
+      currentPeriodStart: now,
+      currentPeriodEnd: addDays(now, TRIAL_DAYS),
+      graceEndsAt: addDays(addDays(now, TRIAL_DAYS), GRACE_DAYS),
+    },
+  });
+}
+
+async function createRazorpayOrder({ amountPaise, receipt, notes }) {
+  const { keyId, keySecret } = getRazorpayConfig();
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+
+  const response = await fetch(`${RAZORPAY_API_BASE}/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: amountPaise,
+      currency: "INR",
+      receipt,
+      notes,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error?.description || "Failed to create Razorpay order.");
+  }
+  return data;
+}
+
+async function activateSubscriptionForPayment(payment, paymentId, signature) {
+  const planConfig = PLAN_CONFIG[payment.plan];
+  if (!planConfig) throw new Error("Subscription plan is invalid.");
+
+  const now = new Date();
+  const periodEnd = addDays(now, planConfig.durationDays);
+  const graceEndsAt = addDays(periodEnd, GRACE_DAYS);
+
+  return prisma.$transaction(async (tx) => {
+    const updatedPayment = await tx.subscriptionPayment.update({
+      where: { id: payment.id },
+      data: {
+        status: "PAID",
+        razorpayPaymentId: paymentId || payment.razorpayPaymentId,
+        razorpaySignature: signature || payment.razorpaySignature,
+        paidAt: now,
+      },
+    });
+
+    const subscription = await tx.subscription.update({
+      where: { id: payment.subscriptionId },
+      data: {
+        plan: payment.plan,
+        status: "ACTIVE",
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        graceEndsAt,
+      },
+    });
+
+    return { payment: updatedPayment, subscription };
+  });
+}
+
+async function getMySubscription(req, res) {
+  try {
+    const userId = req.user.userId;
+    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    return res.json({ subscription: formatSubscription(subscription), plans: PLAN_CONFIG });
+  } catch (err) {
+    logger.error("getMySubscription error:", err);
+    return res.status(500).json({ error: "Failed to load subscription." });
+  }
+}
+
+async function startTrial(req, res) {
+  try {
+    const userId = req.user.userId;
+    const existing = await prisma.subscription.findUnique({ where: { userId } });
+    if (existing) {
+      return res.status(409).json({ error: "Trial or subscription already exists.", subscription: formatSubscription(existing) });
+    }
+
+    const subscription = await ensureSubscription(userId);
+    return res.status(201).json({ message: "Free trial started.", subscription: formatSubscription(subscription) });
+  } catch (err) {
+    logger.error("startTrial error:", err);
+    return res.status(500).json({ error: "Failed to start free trial." });
+  }
+}
+
+async function createSubscriptionOrder(req, res) {
+  try {
+    const userId = req.user.userId;
+    const plan = normalizePlan(req.body.plan);
+    if (!plan) return res.status(400).json({ error: "Choose a valid subscription plan." });
+
+    const subscription = await ensureSubscription(userId);
+    const planConfig = PLAN_CONFIG[plan];
+    const receipt = `sub_${subscription.id.slice(-10)}_${Date.now().toString(36)}`.slice(0, 40);
+
+    const razorpayOrder = await createRazorpayOrder({
+      amountPaise: planConfig.amountPaise,
+      receipt,
+      notes: {
+        type: "focusforge_subscription",
+        userId,
+        subscriptionId: subscription.id,
+        plan,
+      },
+    });
+
+    const payment = await prisma.subscriptionPayment.create({
+      data: {
+        subscriptionId: subscription.id,
+        userId,
+        plan,
+        razorpayOrderId: razorpayOrder.id,
+        amountPaise: planConfig.amountPaise,
+        receipt,
+      },
+    });
+
+    return res.status(201).json({
+      keyId: process.env.RAZORPAY_KEY_ID,
+      paymentId: payment.id,
+      plan: { id: plan, ...planConfig },
+      order: {
+        id: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        receipt: razorpayOrder.receipt,
+      },
+    });
+  } catch (err) {
+    logger.error("createSubscriptionOrder error:", err);
+    return res.status(err.status || 500).json({ error: err.message || "Failed to start subscription payment." });
+  }
+}
+
+async function verifySubscriptionPayment(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { keySecret } = getRazorpayConfig();
+
+    const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: razorpay_order_id } });
+    if (!payment || payment.userId !== userId) return res.status(404).json({ error: "Subscription order not found." });
+
+    if (payment.status === "PAID") {
+      const subscription = await prisma.subscription.findUnique({ where: { id: payment.subscriptionId } });
+      return res.json({ message: "Subscription already active.", subscription: formatSubscription(subscription) });
+    }
+
+    const signatureOk = verifyCheckoutSignature(
+      payment.razorpayOrderId,
+      razorpay_payment_id,
+      razorpay_signature,
+      keySecret
+    );
+    if (!signatureOk) return res.status(400).json({ error: "Payment signature verification failed." });
+
+    const result = await activateSubscriptionForPayment(payment, razorpay_payment_id, razorpay_signature);
+    return res.json({ message: "Subscription activated.", subscription: formatSubscription(result.subscription) });
+  } catch (err) {
+    logger.error("verifySubscriptionPayment error:", err);
+    return res.status(err.status || 500).json({ error: err.message || "Failed to verify subscription payment." });
+  }
+}
+
+async function processSubscriptionWebhookOrder({ orderId, paymentId }) {
+  if (!orderId) return false;
+  const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: orderId } });
+  if (!payment || payment.status === "PAID") return false;
+  await activateSubscriptionForPayment(payment, paymentId || payment.razorpayPaymentId, payment.razorpaySignature);
+  return true;
+}
+
+module.exports = {
+  PLAN_CONFIG,
+  formatSubscription,
+  getMySubscription,
+  startTrial,
+  createSubscriptionOrder,
+  verifySubscriptionPayment,
+  processSubscriptionWebhookOrder,
+};
