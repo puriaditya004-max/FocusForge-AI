@@ -5,6 +5,7 @@ const { requireAuth } = require("../middleware/auth.middleware");
 const { requireParentalConsentIfMinor } = require("../middleware/ageGate.middleware");
 const {
   getMySubscription,
+  listMySubscriptionPayments,
   startTrial,
   createSubscriptionOrder,
   verifySubscriptionPayment,
@@ -32,6 +33,7 @@ function parentalConsentForStudentsOnly(req, res, next) {
 }
 
 router.get("/me", requireAuth, requireStudentOrParent, getMySubscription);
+router.get("/payments", requireAuth, requireStudentOrParent, listMySubscriptionPayments);
 router.post("/trial", requireAuth, requireStudent, startTrial);
 router.post(
   "/order",
