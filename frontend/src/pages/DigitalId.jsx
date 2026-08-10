@@ -25,6 +25,7 @@ export default function DigitalId() {
   const [needsVerification, setNeedsVerification] = useState(false);
   const [card, setCard] = useState(null);
   const [holder, setHolder] = useState(null);
+  const [subscription, setSubscription] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [verifyChannel, setVerifyChannel] = useState("EMAIL");
   const [verifyTarget, setVerifyTarget] = useState("");
@@ -58,6 +59,7 @@ export default function DigitalId() {
 
       setCard(data.card);
       setHolder(data.holder || null);
+      setSubscription(data.subscription || null);
       await buildQr(data.card.verifyToken);
     } catch (err) {
       setError(err.message || "Something went wrong loading your Digital ID.");
@@ -191,6 +193,23 @@ export default function DigitalId() {
       .slice(0, 2)
       .map((part) => part.charAt(0).toUpperCase())
       .join("") || "S";
+  const subscriptionStatus = subscription?.status || "NONE";
+  const subscriptionLabel =
+    subscriptionStatus === "TRIALING"
+      ? "Trial"
+      : subscriptionStatus === "ACTIVE"
+        ? "Active"
+        : subscriptionStatus === "GRACE"
+          ? "Grace"
+          : "Expired";
+  const subscriptionClass =
+    subscriptionStatus === "ACTIVE"
+      ? "bg-green-400/15 border-green-300/25 text-green-200"
+      : subscriptionStatus === "TRIALING"
+        ? "bg-purple-400/15 border-purple-300/25 text-purple-100"
+        : subscriptionStatus === "GRACE"
+          ? "bg-yellow-400/15 border-yellow-300/25 text-yellow-100"
+          : "bg-red-400/15 border-red-300/25 text-red-100";
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -339,6 +358,12 @@ export default function DigitalId() {
                       <p className="text-[10px] text-purple-200 uppercase tracking-wider mb-1">Verification</p>
                       <p className="text-sm font-semibold flex items-center gap-1 text-green-200">
                         <CheckCircle2 size={14} /> QR Active
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white/8 border border-white/10 p-3 col-span-2">
+                      <p className="text-[10px] text-purple-200 uppercase tracking-wider mb-1">Subscription</p>
+                      <p className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${subscriptionClass}`}>
+                        {subscriptionLabel}
                       </p>
                     </div>
                   </div>
