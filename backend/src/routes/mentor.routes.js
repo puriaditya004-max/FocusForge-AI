@@ -6,6 +6,7 @@ const express = require("express");
 const router = express.Router();
 
 const { requireAuth } = require("../middleware/auth.middleware");
+const { requirePremiumAccess } = require("../middleware/subscription.middleware");
 const validate = require("../middleware/validate.middleware");
 const { aiDailyLimiter, aiBurstLimiter } = require("../middleware/rateLimiter.middleware");
 const {
@@ -32,6 +33,7 @@ router.get("/history", requireAuth, getHistory);
 router.post(
   "/message",
   requireAuth,
+  requirePremiumAccess,
   aiBurstLimiter,
   aiDailyLimiter,
   validate(sendMessageSchema),
@@ -45,6 +47,7 @@ router.get("/recommendations", requireAuth, getRecommendations);
 router.post(
   "/voice-command",
   requireAuth,
+  requirePremiumAccess,
   aiBurstLimiter,
   aiDailyLimiter,
   validate(voiceCommandSchema),
@@ -59,6 +62,7 @@ router.get("/weakness-report", requireAuth, getWeaknessReport);
 router.post(
   "/generate-quiz",
   requireAuth,
+  requirePremiumAccess,
   aiBurstLimiter,
   aiDailyLimiter,
   validate(generateQuizSchema),
