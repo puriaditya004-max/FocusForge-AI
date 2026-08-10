@@ -35,10 +35,9 @@ const formatTask = (task) => ({
 });
 
 // GET /api/tasks?page=1&limit=20
-// Returns a page of tasks belonging to the logged-in user
 const getTasks = async (req, res) => {
   try {
-    const userId = req.user.userId; // set by requireAuth middleware
+    const userId = req.user.userId;
 
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
@@ -69,7 +68,6 @@ const getTasks = async (req, res) => {
 };
 
 // POST /api/tasks
-// Creates a new task for the logged-in user
 const createTask = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -98,8 +96,39 @@ const createTask = async (req, res) => {
   }
 };
 
+// PATCH /api/tasks/:id
+// Updates editable fields (time, duration, title) — used by
+// Today's Plan's manual start-time / duration chain adjustment.
+const updateTask = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { id } = req.params;
+    const { time, duration, title } = req.body;
+
+    const existing = await prisma.task.findFirst({ where: { id, userId } });
+    if (!existing) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    const data = {};
+    if (time !== undefined) data.time = time ? String(time).trim() : null;
+    if (duration !== undefined) data.duration = duration ? String(duration).trim() : null;
+    if (title !== undefined && title.trim()) data.title = title.trim();
+
+    const task = await prisma.task.update({
+      where: { id },
+      data,
+      include: { subtasks: true },
+    });
+
+    res.status(200).json(formatTask(task));
+  } catch (err) {
+    logger.error("updateTask error:", err);
+    res.status(500).json({ message: "Failed to update task" });
+  }
+};
+
 // PATCH /api/tasks/:id/toggle
-// Flips the completed status of a task
 const toggleTask = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -118,8 +147,6 @@ const toggleTask = async (req, res) => {
       include: { subtasks: true },
     });
 
-    // Only log when a task goes to completed=true — flipping it back
-    // off is a correction, not a new activity-feed-worthy event.
     if (nowCompleted) {
       await logActivity(userId, {
         icon: "📖",
@@ -136,7 +163,6 @@ const toggleTask = async (req, res) => {
 };
 
 // PATCH /api/tasks/:taskId/subtasks/:subId/toggle
-// Flips the completed status of a subtask
 const toggleSubtask = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -170,7 +196,6 @@ const toggleSubtask = async (req, res) => {
 };
 
 // DELETE /api/tasks/:id
-// Deletes a task (and its subtasks, via cascade delete)
 const deleteTask = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -196,4 +221,5 @@ module.exports = {
   toggleTask,
   toggleSubtask,
   deleteTask,
+  updateTask,
 };
