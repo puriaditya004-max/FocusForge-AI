@@ -36,4 +36,30 @@ const createTaskSchema = z.object({
     .or(z.literal("")),
 });
 
-module.exports = { createTaskSchema };
+// PATCH /api/tasks/:id — used by Today's Plan's manual time/duration editing
+const updateTaskSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(1, "Task title cannot be empty.")
+      .max(150, "Task title must be under 150 characters.")
+      .optional(),
+    time: z
+      .string()
+      .trim()
+      .max(20, "Time must be under 20 characters.")
+      .optional()
+      .or(z.literal("")),
+    duration: z
+      .string()
+      .trim()
+      .max(30, "Duration must be under 30 characters.")
+      .optional()
+      .or(z.literal("")),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update.",
+  });
+
+module.exports = { createTaskSchema, updateTaskSchema };
