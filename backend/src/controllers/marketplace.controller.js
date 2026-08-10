@@ -21,7 +21,7 @@ async function browseCourses(req, res) {
       where: { published: true, teacher: { teacherVerificationStatus: "APPROVED" } },
       orderBy: { createdAt: "desc" },
       include: {
-        teacher: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true, teacherVerificationStatus: true, teacherVerifiedAt: true } },
         enrollments: { select: { studentId: true, status: true } },
         videos: { select: { id: true, isPreview: true } },
       },
@@ -37,6 +37,8 @@ async function browseCourses(req, res) {
         description: c.description,
         price: c.price,
         teacherName: c.teacher.name,
+        teacherVerified: c.teacher.teacherVerificationStatus === "APPROVED",
+        teacherVerifiedAt: c.teacher.teacherVerifiedAt,
         studentsEnrolled: approvedCount, // only real, paid/approved students count
         enrollmentStatus: myEnrollment ? myEnrollment.status : null, // null | PENDING | APPROVED | REJECTED
         videoCount: c.videos.length,
@@ -115,7 +117,14 @@ async function getMyCourses(req, res) {
 
     const enrollments = await prisma.enrollment.findMany({
       where: { studentId },
-      include: { course: { include: { teacher: { select: { name: true } }, videos: true } } },
+      include: {
+        course: {
+          include: {
+            teacher: { select: { name: true, teacherVerificationStatus: true, teacherVerifiedAt: true } },
+            videos: true,
+          },
+        },
+      },
       orderBy: { enrolledAt: "desc" },
     });
 
@@ -124,6 +133,8 @@ async function getMyCourses(req, res) {
       courseId: e.course.id,
       title: e.course.title,
       teacherName: e.course.teacher.name,
+      teacherVerified: e.course.teacher.teacherVerificationStatus === "APPROVED",
+      teacherVerifiedAt: e.course.teacher.teacherVerifiedAt,
       progress: e.progress,
       status: e.status,
       videoCount: e.course.videos.length,
