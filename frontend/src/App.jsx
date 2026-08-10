@@ -28,6 +28,7 @@ import DigitalId from "./pages/DigitalId";
 import VerifyId from "./pages/VerifyId";
 import Subscription from "./pages/Subscription";
 import HeyForgeWidget from "./components/HeyForgeWidget";
+import PremiumGate from "./components/PremiumGate";
 
 export default function App() {
   return (
@@ -64,7 +65,9 @@ export default function App() {
             path="/quiz"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <QuizGenerator />
+                <PremiumGate featureName="Quiz Generator">
+                  <QuizGenerator />
+                </PremiumGate>
               </ProtectedRoute>
             }
           />
@@ -136,7 +139,9 @@ export default function App() {
             path="/ai-mentor"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <AiMentor />
+                <PremiumGate featureName="AI Mentor">
+                  <AiMentor />
+                </PremiumGate>
               </ProtectedRoute>
             }
           />
@@ -152,7 +157,9 @@ export default function App() {
             path="/focus-mode"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <FocusMode />
+                <PremiumGate featureName="Focus Mode">
+                  <FocusMode />
+                </PremiumGate>
               </ProtectedRoute>
             }
           />
@@ -168,7 +175,9 @@ export default function App() {
             path="/todays-plan"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <TodaysPlan />
+                <PremiumGate featureName="Today's Plan">
+                  <TodaysPlan />
+                </PremiumGate>
               </ProtectedRoute>
             }
           />
@@ -184,7 +193,9 @@ export default function App() {
             path="/timetable"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <Timetable />
+                <PremiumGate featureName="Smart Timetable">
+                  <Timetable />
+                </PremiumGate>
               </ProtectedRoute>
             }
           />
