@@ -8,11 +8,19 @@ const {
   listTeacherVerifications,
   reviewTeacherVerification,
 } = require("../controllers/verification.controller");
-const { getAdminOverview, listRefunds, listStudyRoomReports, resolveStudyRoomReport, listPayouts } = require("../controllers/admin.controller");
+const {
+  getAdminOverview,
+  updateSubscriptionAccess,
+  listRefunds,
+  listStudyRoomReports,
+  resolveStudyRoomReport,
+  listPayouts,
+} = require("../controllers/admin.controller");
 const { processRefund, retryPayout } = require("../controllers/payment.controller");
 const { listDigitalIds, revokeDigitalId } = require("../controllers/digitalid.controller");
 
 router.get("/overview", requireAuth, requireRole("ADMIN"), getAdminOverview);
+router.patch("/subscriptions/:id", requireAuth, requireRole("ADMIN"), updateSubscriptionAccess);
 
 router.get("/teacher-verifications", requireAuth, requireRole("ADMIN"), listTeacherVerifications);
 router.post("/teacher-verifications/:id/review", requireAuth, requireRole("ADMIN"), validate(teacherReviewSchema), reviewTeacherVerification);
