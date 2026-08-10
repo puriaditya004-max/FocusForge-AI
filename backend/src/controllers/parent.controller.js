@@ -14,7 +14,8 @@ const prisma = require("../config/db");
 const logger = require("../utils/logger");
 const { formatSubscription } = require("./subscription.controller");
 
-async function getStudentSnapshot(studentId) {
+async function getStudentSnapshot(link) {
+  const studentId = link.studentId;
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date();
@@ -76,11 +77,20 @@ async function getStudentSnapshot(studentId) {
     currentStreak: student.currentStreak,
     longestStreak: student.longestStreak,
     dailyGoalHours: student.dailyGoalHours,
+    parentMinDailyGoalHours: link.minDailyGoalHours,
     tasksCompletedToday: tasksCompleted,
     tasksTotalToday: todaysTasks.length,
     studyHoursToday: +(studySecondsToday / 3600).toFixed(1),
     studyHoursThisWeek: +(weekStudySeconds / 3600).toFixed(1),
     focusScoreThisWeek: avgFocusScore,
+    weeklyDigest: {
+      studyHours: +(weekStudySeconds / 3600).toFixed(1),
+      sessions: weekSessions.length,
+      averageFocusScore: avgFocusScore,
+      tasksCompletedToday: tasksCompleted,
+      tasksTotalToday: todaysTasks.length,
+      currentFocusTitle: currentRoadmap?.title || null,
+    },
     currentFocus: currentRoadmap
       ? {
           weekNumber: currentRoadmap.weekNumber,
@@ -114,7 +124,7 @@ async function getOverview(req, res) {
     ]);
 
     const children = await Promise.all(
-      links.map((link) => getStudentSnapshot(link.studentId))
+      links.map((link) => getStudentSnapshot(link))
     );
 
     return res.json({
@@ -137,6 +147,63 @@ async function getOverview(req, res) {
   } catch (err) {
     logger.error("Parent getOverview error:", err);
     return res.status(500).json({ error: "Failed to load parent overview." });
+  }
+}
+
+// PATCH /api/parent/children/:studentId/goal
+// Body: { minDailyGoalHours: number | null }
+// Parent can set a minimum daily goal for an approved linked student.
+async function updateChildGoal(req, res) {
+  try {
+    const parentId = req.user.userId;
+    const { studentId } = req.params;
+    const rawGoal = req.body.minDailyGoalHours;
+
+    const minDailyGoalHours =
+      rawGoal === null || rawGoal === "" || rawGoal === undefined
+        ? null
+        : Number(rawGoal);
+
+    if (minDailyGoalHours !== null && (!Number.isInteger(minDailyGoalHours) || minDailyGoalHours < 1 || minDailyGoalHours > 16)) {
+      return res.status(400).json({ error: "Minimum daily goal must be between 1 and 16 hours." });
+    }
+
+    const link = await prisma.studentParentLink.findUnique({
+      where: { studentId_parentId: { studentId, parentId } },
+      include: { student: { select: { id: true, name: true, dailyGoalHours: true } } },
+    });
+
+    if (!link || link.status !== "APPROVED") {
+      return res.status(404).json({ error: "Approved student link not found." });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const savedLink = await tx.studentParentLink.update({
+        where: { id: link.id },
+        data: { minDailyGoalHours },
+      });
+
+      if (minDailyGoalHours !== null && link.student.dailyGoalHours < minDailyGoalHours) {
+        await tx.user.update({
+          where: { id: studentId },
+          data: { dailyGoalHours: minDailyGoalHours },
+        });
+      }
+
+      return savedLink;
+    });
+
+    return res.json({
+      message:
+        minDailyGoalHours === null
+          ? "Parent minimum daily goal cleared."
+          : `Minimum daily goal set to ${minDailyGoalHours}h.`,
+      studentId,
+      minDailyGoalHours: updated.minDailyGoalHours,
+    });
+  } catch (err) {
+    logger.error("updateChildGoal error:", err);
+    return res.status(500).json({ error: "Failed to update child goal." });
   }
 }
 
@@ -267,4 +334,4 @@ async function respondToRequest(req, res) {
   }
 }
 
-module.exports = { getOverview, linkStudent, getPendingRequests, respondToRequest };
+module.exports = { getOverview, linkStudent, updateChildGoal, getPendingRequests, respondToRequest };
