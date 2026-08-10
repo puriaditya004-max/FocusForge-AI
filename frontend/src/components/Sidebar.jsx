@@ -19,6 +19,7 @@ import {
   Store,
   Brain,
   Contact,
+  Crown,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { key: "progress", label: "Progress", icon: BarChart3, path: "/progress" },
   { key: "rewards", label: "Rewards", icon: Trophy, path: "/rewards" },
   { key: "digital-id", label: "Digital ID", icon: Contact, path: "/digital-id" },
+  { key: "subscription", label: "Subscription", icon: Crown, path: "/subscription" },
   { key: "penalties", label: "Penalties", icon: ShieldAlert, path: "/penalties" },
   { key: "focus-mode", label: "Focus Mode", icon: Camera, path: "/focus-mode" },
   { key: "settings", label: "Settings", icon: Settings, path: "/settings" },
