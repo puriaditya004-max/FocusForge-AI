@@ -10,6 +10,10 @@ const logger = require("../utils/logger");
 
 async function getAdminOverview(req, res) {
   try {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
     const [
       usersByRole,
       pendingTeacherVerifications,
@@ -21,8 +25,16 @@ async function getAdminOverview(req, res) {
       activeDigitalIds,
       totalCourses,
       totalEnrollments,
+      subscriptionsByStatus,
+      subscriptionsByPlan,
+      activeFamilyLinkedStudents,
+      subscriptionRevenueAgg,
+      monthlySubscriptionRevenueAgg,
+      paidSubscriptionPaymentCount,
       recentUsers,
       recentPayments,
+      recentSubscriptionPayments,
+      recentSubscriptions,
     ] = await Promise.all([
       prisma.user.groupBy({ by: ["role"], _count: { role: true } }),
       prisma.teacherVerification.count({ where: { status: "PENDING" } }),
@@ -34,6 +46,25 @@ async function getAdminOverview(req, res) {
       prisma.digitalId.count({ where: { status: "ACTIVE" } }),
       prisma.course.count(),
       prisma.enrollment.count({ where: { status: "APPROVED" } }),
+      prisma.subscription.groupBy({ by: ["status"], _count: { status: true } }),
+      prisma.subscription.groupBy({ by: ["plan"], _count: { plan: true } }),
+      prisma.studentParentLink.count({
+        where: {
+          status: "APPROVED",
+          parent: {
+            subscription: {
+              plan: "FAMILY",
+              status: { in: ["ACTIVE", "TRIALING"] },
+            },
+          },
+        },
+      }),
+      prisma.subscriptionPayment.aggregate({ where: { status: "PAID" }, _sum: { amountPaise: true } }),
+      prisma.subscriptionPayment.aggregate({
+        where: { status: "PAID", paidAt: { gte: monthStart } },
+        _sum: { amountPaise: true },
+      }),
+      prisma.subscriptionPayment.count({ where: { status: "PAID" } }),
       prisma.user.findMany({
         orderBy: { createdAt: "desc" },
         take: 8,
@@ -62,11 +93,48 @@ async function getAdminOverview(req, res) {
           student: { select: { name: true, email: true } },
         },
       }),
+      prisma.subscriptionPayment.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        select: {
+          id: true,
+          status: true,
+          plan: true,
+          amountPaise: true,
+          createdAt: true,
+          paidAt: true,
+          user: { select: { name: true, email: true, role: true } },
+        },
+      }),
+      prisma.subscription.findMany({
+        orderBy: { updatedAt: "desc" },
+        take: 12,
+        select: {
+          id: true,
+          plan: true,
+          status: true,
+          trialEndsAt: true,
+          currentPeriodEnd: true,
+          graceEndsAt: true,
+          updatedAt: true,
+          user: { select: { name: true, email: true, role: true } },
+        },
+      }),
     ]);
 
     const roleCounts = { STUDENT: 0, PARENT: 0, TEACHER: 0, ADMIN: 0 };
     usersByRole.forEach((r) => {
       roleCounts[r.role] = r._count.role;
+    });
+
+    const subscriptionStatusCounts = { TRIALING: 0, ACTIVE: 0, EXPIRED: 0, CANCELLED: 0 };
+    subscriptionsByStatus.forEach((s) => {
+      subscriptionStatusCounts[s.status] = s._count.status;
+    });
+
+    const subscriptionPlanCounts = { TRIAL: 0, STUDENT_MONTHLY: 0, STUDENT_YEARLY: 0, FAMILY: 0 };
+    subscriptionsByPlan.forEach((p) => {
+      subscriptionPlanCounts[p.plan] = p._count.plan;
     });
 
     return res.json({
@@ -84,6 +152,15 @@ async function getAdminOverview(req, res) {
       activeDigitalIds,
       totalCourses,
       totalEnrollments,
+      subscriptions: {
+        byStatus: subscriptionStatusCounts,
+        byPlan: subscriptionPlanCounts,
+        activeOrTrialing: subscriptionStatusCounts.ACTIVE + subscriptionStatusCounts.TRIALING,
+        familyLinkedStudents: activeFamilyLinkedStudents,
+        totalRevenuePaise: subscriptionRevenueAgg._sum.amountPaise || 0,
+        monthlyRevenuePaise: monthlySubscriptionRevenueAgg._sum.amountPaise || 0,
+        paidPaymentCount: paidSubscriptionPaymentCount,
+      },
       recentUsers,
       recentPayments: recentPayments.map((p) => ({
         id: p.id,
@@ -96,6 +173,28 @@ async function getAdminOverview(req, res) {
         courseTitle: p.course?.title || "Untitled course",
         studentName: p.student?.name || "Unknown student",
         studentEmail: p.student?.email || "",
+      })),
+      recentSubscriptionPayments: recentSubscriptionPayments.map((p) => ({
+        id: p.id,
+        status: p.status,
+        plan: p.plan,
+        amountPaise: p.amountPaise,
+        createdAt: p.createdAt,
+        paidAt: p.paidAt,
+        userName: p.user?.name || "Unknown user",
+        userEmail: p.user?.email || "",
+        userRole: p.user?.role || "",
+      })),
+      recentSubscriptions: recentSubscriptions.map((s) => ({
+        id: s.id,
+        plan: s.plan,
+        status: s.status,
+        accessEndsAt: s.currentPeriodEnd || s.trialEndsAt,
+        graceEndsAt: s.graceEndsAt,
+        updatedAt: s.updatedAt,
+        userName: s.user?.name || "Unknown user",
+        userEmail: s.user?.email || "",
+        userRole: s.user?.role || "",
       })),
     });
   } catch (err) {
