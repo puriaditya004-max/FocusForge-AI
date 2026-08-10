@@ -1,5 +1,7 @@
 jest.mock("../src/config/db", () => {
   const mockPrisma = {
+    user: { findUnique: jest.fn() },
+    studentParentLink: { findFirst: jest.fn() },
     course: { findUnique: jest.fn() },
     enrollment: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     payment: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
@@ -65,6 +67,11 @@ describe("POST /api/payments/courses/:courseId/order", () => {
     global.fetch = jest.fn();
     process.env.RAZORPAY_KEY_ID = "rzp_test_key";
     process.env.RAZORPAY_KEY_SECRET = "test_secret";
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user_1",
+      dateOfBirth: new Date("2000-01-01"),
+    });
+    prisma.studentParentLink.findFirst.mockResolvedValue(null);
   });
 
   afterAll(() => {
