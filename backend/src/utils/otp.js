@@ -19,6 +19,16 @@ function verifyOtpHash(code, codeHash) {
   return hashOtp(code) === codeHash;
 }
 
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
+function deliveryNotConfigured(message) {
+  const err = new Error(message);
+  err.status = 503;
+  return err;
+}
+
 // ---------------------------------------------------------
 // SMS providers — real delivery for the MOBILE channel.
 // Selected via OTP_SMS_PROVIDER env var: "msg91" | "twilio" | "webhook".
@@ -113,6 +123,9 @@ async function deliverSms(target, code) {
   }
 
   // No provider configured — dev mode, log only.
+  if (isProduction()) {
+    throw deliveryNotConfigured("SMS OTP delivery is not configured on this server.");
+  }
   logger.info(`DEV OTP MOBILE ${target}: ${code}`);
 }
 
@@ -184,6 +197,9 @@ async function deliverEmail(target, code) {
   }
 
   // No provider configured — dev mode, log only.
+  if (isProduction()) {
+    throw deliveryNotConfigured("Email OTP delivery is not configured on this server.");
+  }
   logger.info(`DEV OTP EMAIL ${target}: ${code}`);
 }
 
