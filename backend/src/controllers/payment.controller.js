@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { processSubscriptionWebhookOrder } = require("./subscription.controller");
 
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
 const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT || 10);
@@ -499,6 +500,8 @@ async function handleRazorpayWebhook(req, res) {
       if (payment && payment.status !== "PAID") {
         const result = await approveEnrollmentForPayment(payment, paymentId || payment.razorpayPaymentId, payment.razorpaySignature);
         await attemptRoutePayout(result.payment.id);
+      } else {
+        await processSubscriptionWebhookOrder({ orderId, paymentId });
       }
     }
 
