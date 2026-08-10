@@ -20,7 +20,7 @@ function verifyOtpHash(code, codeHash) {
 }
 
 function isProduction() {
-  return process.env.NODE_ENV === "production";
+  return process.env.NODE_ENV === "production" || process.env.RENDER === "true";
 }
 
 function deliveryNotConfigured(message) {
