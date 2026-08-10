@@ -2,7 +2,16 @@ import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
-import { Contact, Download, ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
+import {
+  Contact,
+  Download,
+  ShieldCheck,
+  ShieldAlert,
+  RefreshCw,
+  Mail,
+  Smartphone,
+  Loader2,
+} from "lucide-react";
 
 // ---------------------------------------------------------
 // DigitalId Page
@@ -25,7 +34,15 @@ export default function DigitalId() {
   const [error, setError] = useState("");
   const [needsVerification, setNeedsVerification] = useState(false);
   const [card, setCard] = useState(null);
+  const [holder, setHolder] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [verifyChannel, setVerifyChannel] = useState("EMAIL");
+  const [verifyTarget, setVerifyTarget] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpStatus, setOtpStatus] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [requestingOtp, setRequestingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const cardRef = useRef(null);
 
   useEffect(() => {
@@ -43,6 +60,7 @@ export default function DigitalId() {
 
       if (res.status === 403 && data.code === "IDENTITY_NOT_VERIFIED") {
         setNeedsVerification(true);
+        setVerifyTarget(user?.email || "");
         return;
       }
       if (!res.ok) {
@@ -50,11 +68,77 @@ export default function DigitalId() {
       }
 
       setCard(data.card);
+      setHolder(data.holder || null);
       await buildQr(data.card.verifyToken);
     } catch (err) {
       setError(err.message || "Something went wrong loading your Digital ID.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function switchChannel(channel) {
+    setVerifyChannel(channel);
+    setVerifyTarget(channel === "EMAIL" ? user?.email || "" : user?.mobileNumber || "");
+    setOtpCode("");
+    setOtpStatus("");
+    setOtpError("");
+  }
+
+  async function requestOtp() {
+    const target = verifyTarget.trim();
+    if (!target) {
+      setOtpError(verifyChannel === "EMAIL" ? "Enter your email address." : "Enter your mobile number.");
+      return;
+    }
+
+    setRequestingOtp(true);
+    setOtpError("");
+    setOtpStatus("");
+    try {
+      const res = await fetch(`${API_BASE}/auth/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channel: verifyChannel, target }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || "Could not send OTP.");
+      setOtpStatus(data.devCode ? `OTP sent. Dev code: ${data.devCode}` : "OTP sent. Check your inbox or phone.");
+    } catch (err) {
+      setOtpError(err.message || "Could not send OTP.");
+    } finally {
+      setRequestingOtp(false);
+    }
+  }
+
+  async function verifyOtp() {
+    const target = verifyTarget.trim();
+    const code = otpCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setOtpError("Enter the 6-digit OTP.");
+      return;
+    }
+
+    setVerifyingOtp(true);
+    setOtpError("");
+    try {
+      const res = await fetch(`${API_BASE}/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channel: verifyChannel, target, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || "OTP verification failed.");
+      setOtpStatus("Verified. Issuing your Digital ID...");
+      setNeedsVerification(false);
+      setOtpCode("");
+      await loadCard();
+    } catch (err) {
+      setOtpError(err.message || "OTP verification failed.");
+    } finally {
+      setVerifyingOtp(false);
     }
   }
 
@@ -93,12 +177,14 @@ export default function DigitalId() {
   const issueDate = card
     ? new Date(card.issuedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : "";
+  const displayName = holder?.name || user?.name || "Student";
+  const displayRole = holder?.role || user?.role || "STUDENT";
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
       <Sidebar />
       <main className="flex-1 flex flex-col">
-        <TopBar userName={user?.name || "Student"} streak={user?.currentStreak || 0} level={user?.level || 1} />
+        <TopBar userName={displayName} streak={user?.currentStreak || 0} level={user?.level || 1} />
 
         <div className="px-6 mt-4 mb-8 flex flex-col items-center gap-5">
           <div className="text-center">
@@ -112,19 +198,74 @@ export default function DigitalId() {
           {loading && <p className="text-sm text-gray-400 mt-8">Loading your Digital ID...</p>}
 
           {!loading && needsVerification && (
-            <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-6 text-center">
+            <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-2xl p-6">
               <ShieldAlert className="mx-auto text-yellow-400 mb-3" size={32} />
-              <h2 className="text-base font-semibold mb-1">Verify your identity first</h2>
-              <p className="text-sm text-gray-400 mb-4">
-                Your Digital ID is issued automatically once your email or mobile number is verified. Head to
-                Settings to complete verification.
+              <h2 className="text-base font-semibold mb-1 text-center">Verify your identity first</h2>
+              <p className="text-sm text-gray-400 mb-5 text-center">
+                Your Digital ID is issued automatically after one OTP check. Choose email or mobile, verify the code,
+                and your card will appear here.
               </p>
-              <a
-                href="/settings"
-                className="inline-block bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
-              >
-                Go to Settings
-              </a>
+
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <button
+                  onClick={() => switchChannel("EMAIL")}
+                  className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition ${
+                    verifyChannel === "EMAIL"
+                      ? "bg-purple-600/20 border-purple-500/40 text-purple-200"
+                      : "bg-white/5 border-white/10 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Mail size={16} /> Email
+                </button>
+                <button
+                  onClick={() => switchChannel("MOBILE")}
+                  className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition ${
+                    verifyChannel === "MOBILE"
+                      ? "bg-purple-600/20 border-purple-500/40 text-purple-200"
+                      : "bg-white/5 border-white/10 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Smartphone size={16} /> Mobile
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] mb-3">
+                <input
+                  value={verifyTarget}
+                  onChange={(e) => setVerifyTarget(e.target.value)}
+                  placeholder={verifyChannel === "EMAIL" ? "Email address" : "Mobile number with country code"}
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-gray-100 outline-none focus:border-purple-500/50"
+                />
+                <button
+                  onClick={requestOtp}
+                  disabled={requestingOtp}
+                  className="inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+                >
+                  {requestingOtp ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Send OTP
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <input
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit OTP"
+                  inputMode="numeric"
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-gray-100 tracking-[0.3em] outline-none focus:border-purple-500/50"
+                />
+                <button
+                  onClick={verifyOtp}
+                  disabled={verifyingOtp}
+                  className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+                >
+                  {verifyingOtp ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                  Verify
+                </button>
+              </div>
+
+              {otpStatus && <p className="text-xs text-green-400 mt-3 text-center">{otpStatus}</p>}
+              {otpError && <p className="text-xs text-red-400 mt-3 text-center">{otpError}</p>}
             </div>
           )}
 
@@ -162,11 +303,11 @@ export default function DigitalId() {
 
                 <div className="px-6 py-5 flex gap-4 items-center">
                   <div className="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center text-2xl font-bold flex-shrink-0 font-sans">
-                    {user?.name?.charAt(0)?.toUpperCase() || "S"}
+                    {displayName.charAt(0)?.toUpperCase() || "S"}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-bold truncate">{user?.name}</p>
-                    <p className="text-xs font-sans text-purple-200 uppercase tracking-wide">{card && (user?.role || "STUDENT")}</p>
+                    <p className="text-lg font-bold truncate">{displayName}</p>
+                    <p className="text-xs font-sans text-purple-200 uppercase tracking-wide">{displayRole}</p>
                     <p className="text-xs font-sans text-purple-200 mt-1">Issued {issueDate}</p>
                   </div>
                 </div>
