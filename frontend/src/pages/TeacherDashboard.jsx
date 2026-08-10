@@ -269,6 +269,16 @@ export default function TeacherDashboard() {
                         <> · Approved {new Date(overview.teacherVerifiedAt).toLocaleDateString("en-IN")}</>
                       )}
                     </p>
+                    {overview?.verificationStatus === "REJECTED" && overview?.verificationReviewerNotes && (
+                      <p className="text-xs text-red-300 mt-2">
+                        Admin note: {overview.verificationReviewerNotes}
+                      </p>
+                    )}
+                    {overview?.verificationStatus === "PENDING" && overview?.verificationSubmittedAt && (
+                      <p className="text-xs text-yellow-300 mt-2">
+                        Submitted {new Date(overview.verificationSubmittedAt).toLocaleDateString("en-IN")} · waiting for admin review.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -426,6 +436,11 @@ export default function TeacherDashboard() {
 
               {showForm && (
                 <form onSubmit={handleCreateCourse} className="bg-white/5 rounded-xl p-4 mb-4 flex flex-col gap-3">
+                  {overview?.verificationStatus !== "APPROVED" && (
+                    <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs px-3 py-2">
+                      Courses can only be published after admin approves your teacher verification.
+                    </div>
+                  )}
                   <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Course title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
                   <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short description (optional)" rows={2} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500 resize-none" />
                   <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price in Rs (0 for free)" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
@@ -437,6 +452,11 @@ export default function TeacherDashboard() {
 
               {overview?.courses?.length > 0 && (
                 <form onSubmit={handleUploadVideo} className="bg-white/5 rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                  {overview?.verificationStatus !== "APPROVED" && (
+                    <div className="md:col-span-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs px-3 py-2">
+                      Lesson uploads are locked until your teacher verification is approved.
+                    </div>
+                  )}
                   <select value={videoForm.courseId} onChange={(e) => setVideoForm((p) => ({ ...p, courseId: e.target.value }))} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500">
                     <option value="">Select course</option>
                     {overview.courses.map((c) => (
@@ -445,8 +465,8 @@ export default function TeacherDashboard() {
                   </select>
                   <input value={videoForm.title} onChange={(e) => setVideoForm((p) => ({ ...p, title: e.target.value }))} placeholder="Lesson title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
                   <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(e) => setVideoForm((p) => ({ ...p, videoFile: e.target.files?.[0] || null }))} className="text-xs text-gray-400" />
-                  <button type="submit" disabled={uploadingVideo} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2">
-                    <Video size={14} /> {uploadingVideo ? `Uploading... ${uploadProgress}%` : "Add Video"}
+                  <button type="submit" disabled={uploadingVideo || overview?.verificationStatus !== "APPROVED"} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                    <Video size={14} /> {uploadingVideo ? `Uploading... ${uploadProgress}%` : overview?.verificationStatus === "APPROVED" ? "Add Video" : "Verification Required"}
                   </button>
                 </form>
               )}
