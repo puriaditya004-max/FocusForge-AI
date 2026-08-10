@@ -1,7 +1,10 @@
 const crypto = require("crypto");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
-const { processSubscriptionWebhookOrder } = require("./subscription.controller");
+const {
+  processSubscriptionWebhookOrder,
+  processSubscriptionWebhookFailure,
+} = require("./subscription.controller");
 
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
 const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT || 10);
@@ -505,10 +508,19 @@ async function handleRazorpayWebhook(req, res) {
       }
     }
 
+    if (event.event === "payment.failed" && orderId) {
+      await processSubscriptionWebhookFailure({ orderId, paymentId });
+    }
+
     if (eventId) {
-      await prisma.paymentWebhookEvent.create({
-        data: { eventId, eventType: event.event || "unknown" },
-      });
+      try {
+        await prisma.paymentWebhookEvent.create({
+          data: { eventId, eventType: event.event || "unknown" },
+        });
+      } catch (err) {
+        if (err.code === "P2002") return res.json({ ok: true, duplicate: true });
+        throw err;
+      }
     }
 
     return res.json({ ok: true });
