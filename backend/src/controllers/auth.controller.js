@@ -48,7 +48,12 @@ function toSafeUser(user) {
 
 function normalizeOtpTarget(user, channel, target) {
   if (channel === "EMAIL") return (target || user.email || "").toLowerCase().trim();
-  return (target || user.mobileNumber || "").trim();
+  const rawMobile = (target || user.mobileNumber || "").trim();
+  const compactMobile = rawMobile.replace(/[\s()-]/g, "");
+  if (/^\d{10}$/.test(compactMobile)) return `+91${compactMobile}`;
+  if (/^91\d{10}$/.test(compactMobile)) return `+${compactMobile}`;
+  if (/^00\d{10,15}$/.test(compactMobile)) return `+${compactMobile.slice(2)}`;
+  return compactMobile;
 }
 
 // POST /api/auth/signup
