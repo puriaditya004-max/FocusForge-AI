@@ -63,6 +63,7 @@ export default function Subscription() {
   const [message, setMessage] = useState("");
   const [workingPlan, setWorkingPlan] = useState("");
   const [startingTrial, setStartingTrial] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const isParent = user?.role === "PARENT";
 
   useEffect(() => {
@@ -204,8 +205,29 @@ export default function Subscription() {
     }
   }
 
+  async function cancelSubscription() {
+    setCancelling(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`${API_BASE}/subscription/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to cancel subscription.");
+      setSubscription(data.subscription);
+      setMessage(data.message || "Subscription cancelled.");
+    } catch (err) {
+      setError(err.message || "Failed to cancel subscription.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const visiblePlans = Object.entries(PLAN_COPY).filter(([planId]) => !isParent || planId === "FAMILY");
   const status = subscription?.status || "NONE";
+  const canCancel = ["ACTIVE", "TRIALING", "GRACE"].includes(status) && subscription?.source !== "FAMILY_PARENT";
   const statusClass =
     status === "ACTIVE"
       ? "bg-green-500/10 text-green-300 border-green-500/20"
@@ -264,6 +286,16 @@ export default function Subscription() {
                     >
                       {startingTrial ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
                       Start 30-day Trial
+                    </button>
+                  )}
+                  {canCancel && (
+                    <button
+                      onClick={cancelSubscription}
+                      disabled={cancelling}
+                      className="inline-flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-200 border border-red-500/20 font-semibold px-5 py-2.5 rounded-xl text-sm disabled:opacity-60"
+                    >
+                      {cancelling ? <Loader2 className="animate-spin" size={16} /> : <ShieldAlert size={16} />}
+                      Cancel access
                     </button>
                   )}
                 </div>
