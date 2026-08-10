@@ -25,6 +25,12 @@ const { handleRazorpayWebhook } = require("./controllers/payment.controller");
 const { UPLOAD_ROOT } = require("./utils/uploadStorage");
 const app = express();
 
+// Render and similar hosts sit behind a reverse proxy. Trust the first proxy so
+// express-rate-limit can safely read X-Forwarded-For instead of throwing.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // --- Security headers (CSP, no-sniff, frameguard, etc.) ---
 app.use(helmet());
 // Remove the "X-Powered-By: Express" header so attackers can't
