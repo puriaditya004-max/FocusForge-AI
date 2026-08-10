@@ -63,6 +63,23 @@ function normalizePlan(plan) {
   return PLAN_CONFIG[safePlan] ? safePlan : null;
 }
 
+function assertPaymentMatchesPlan(payment) {
+  const planConfig = PLAN_CONFIG[payment.plan];
+  if (!planConfig) {
+    const err = new Error("Subscription plan is invalid.");
+    err.status = 409;
+    throw err;
+  }
+
+  if (payment.amountPaise !== planConfig.amountPaise || payment.currency !== "INR") {
+    const err = new Error("Subscription payment amount does not match the selected plan.");
+    err.status = 409;
+    throw err;
+  }
+
+  return planConfig;
+}
+
 function effectiveStatus(subscription) {
   if (!subscription) return "NONE";
   if (subscription.status === "CANCELLED") return "CANCELLED";
@@ -197,8 +214,7 @@ async function createRazorpayOrder({ amountPaise, receipt, notes }) {
 }
 
 async function activateSubscriptionForPayment(payment, paymentId, signature) {
-  const planConfig = PLAN_CONFIG[payment.plan];
-  if (!planConfig) throw new Error("Subscription plan is invalid.");
+  const planConfig = assertPaymentMatchesPlan(payment);
 
   const now = new Date();
   const periodEnd = addDays(now, planConfig.durationDays);
@@ -227,6 +243,18 @@ async function activateSubscriptionForPayment(payment, paymentId, signature) {
     });
 
     return { payment: updatedPayment, subscription };
+  });
+}
+
+async function markSubscriptionPaymentFailedRecord(payment, paymentId) {
+  if (!payment || payment.status === "PAID") return payment;
+
+  return prisma.subscriptionPayment.update({
+    where: { id: payment.id },
+    data: {
+      status: "FAILED",
+      razorpayPaymentId: paymentId || payment.razorpayPaymentId,
+    },
   });
 }
 
@@ -339,11 +367,40 @@ async function verifySubscriptionPayment(req, res) {
   }
 }
 
+async function markSubscriptionPaymentFailed(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { razorpay_order_id, razorpay_payment_id } = req.body;
+    if (!razorpay_order_id) return res.status(400).json({ error: "Subscription order id is required." });
+
+    const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: razorpay_order_id } });
+    if (!payment || payment.userId !== userId) return res.status(404).json({ error: "Subscription order not found." });
+
+    if (payment.status === "PAID") {
+      return res.json({ message: "Subscription payment is already paid.", status: payment.status });
+    }
+
+    const updatedPayment = await markSubscriptionPaymentFailedRecord(payment, razorpay_payment_id);
+    return res.json({ message: "Subscription payment attempt saved.", status: updatedPayment.status });
+  } catch (err) {
+    logger.error("markSubscriptionPaymentFailed error:", err);
+    return res.status(500).json({ error: "Failed to save subscription payment status." });
+  }
+}
+
 async function processSubscriptionWebhookOrder({ orderId, paymentId }) {
   if (!orderId) return false;
   const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: orderId } });
   if (!payment || payment.status === "PAID") return false;
   await activateSubscriptionForPayment(payment, paymentId || payment.razorpayPaymentId, payment.razorpaySignature);
+  return true;
+}
+
+async function processSubscriptionWebhookFailure({ orderId, paymentId }) {
+  if (!orderId) return false;
+  const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: orderId } });
+  if (!payment || payment.status === "PAID") return false;
+  await markSubscriptionPaymentFailedRecord(payment, paymentId);
   return true;
 }
 
@@ -355,5 +412,7 @@ module.exports = {
   startTrial,
   createSubscriptionOrder,
   verifySubscriptionPayment,
+  markSubscriptionPaymentFailed,
   processSubscriptionWebhookOrder,
+  processSubscriptionWebhookFailure,
 };
