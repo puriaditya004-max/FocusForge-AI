@@ -195,6 +195,7 @@ enum FocusSensitivity {
 enum Theme {
   DARK
   LIGHT
+  PURPLE
 }
 
 enum LinkStatus {
