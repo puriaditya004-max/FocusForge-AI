@@ -17,8 +17,12 @@ async function getAdminOverview(req, res) {
       pendingStudyRoomReports,
       paidAgg,
       refundedAgg,
+      paidPaymentCount,
+      activeDigitalIds,
       totalCourses,
       totalEnrollments,
+      recentUsers,
+      recentPayments,
     ] = await Promise.all([
       prisma.user.groupBy({ by: ["role"], _count: { role: true } }),
       prisma.teacherVerification.count({ where: { status: "PENDING" } }),
@@ -26,8 +30,38 @@ async function getAdminOverview(req, res) {
       prisma.studyRoomMessageReport.count({ where: { status: "PENDING" } }),
       prisma.payment.aggregate({ where: { status: "PAID" }, _sum: { amountPaise: true } }),
       prisma.paymentRefund.aggregate({ where: { status: "PROCESSED" }, _sum: { amountPaise: true } }),
+      prisma.payment.count({ where: { status: "PAID" } }),
+      prisma.digitalId.count({ where: { status: "ACTIVE" } }),
       prisma.course.count(),
       prisma.enrollment.count({ where: { status: "APPROVED" } }),
+      prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          emailVerifiedAt: true,
+          mobileVerifiedAt: true,
+        },
+      }),
+      prisma.payment.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        select: {
+          id: true,
+          status: true,
+          amountPaise: true,
+          platformFeePaise: true,
+          teacherAmountPaise: true,
+          createdAt: true,
+          paidAt: true,
+          course: { select: { title: true } },
+          student: { select: { name: true, email: true } },
+        },
+      }),
     ]);
 
     const roleCounts = { STUDENT: 0, PARENT: 0, TEACHER: 0, ADMIN: 0 };
@@ -45,8 +79,24 @@ async function getAdminOverview(req, res) {
       pendingStudyRoomReports,
       totalRevenuePaise: paidAgg._sum.amountPaise || 0,
       totalRefundedPaise: refundedAgg._sum.amountPaise || 0,
+      netRevenuePaise: (paidAgg._sum.amountPaise || 0) - (refundedAgg._sum.amountPaise || 0),
+      paidPaymentCount,
+      activeDigitalIds,
       totalCourses,
       totalEnrollments,
+      recentUsers,
+      recentPayments: recentPayments.map((p) => ({
+        id: p.id,
+        status: p.status,
+        amountPaise: p.amountPaise,
+        platformFeePaise: p.platformFeePaise,
+        teacherAmountPaise: p.teacherAmountPaise,
+        createdAt: p.createdAt,
+        paidAt: p.paidAt,
+        courseTitle: p.course?.title || "Untitled course",
+        studentName: p.student?.name || "Unknown student",
+        studentEmail: p.student?.email || "",
+      })),
     });
   } catch (err) {
     logger.error("getAdminOverview error:", err);
