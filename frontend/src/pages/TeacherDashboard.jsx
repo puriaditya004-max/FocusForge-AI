@@ -13,17 +13,20 @@ import {
   ShieldCheck,
   Upload,
   Video,
+  Wallet,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
-// ---------------------------------------------------------
-// Teacher Dashboard — real data + enrollment approval flow.
-// "Enrollment Requests" shows every PENDING student request
-// with their contact number. The teacher confirms payment
-// themselves (call/UPI check) then Approves or Rejects —
-// only Approved requests count toward real students/earnings.
-// ---------------------------------------------------------
-
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+function formatMoneyPaise(paise) {
+  return `Rs ${((paise || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function formatMoneyRupees(amount) {
+  return `Rs ${Number(amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -32,6 +35,17 @@ function fileToDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function StatCard({ icon: Icon, label, value, tone = "text-gray-100" }) {
+  return (
+    <div className="bg-[#13131f] rounded-xl p-4 border border-white/5">
+      <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+        <Icon size={14} /> {label}
+      </div>
+      <p className={`text-2xl font-semibold ${tone}`}>{value}</p>
+    </div>
+  );
 }
 
 export default function TeacherDashboard() {
@@ -158,21 +172,20 @@ export default function TeacherDashboard() {
       formData.append("title", videoForm.title);
       formData.append("video", videoForm.videoFile);
 
-      // Uses XHR (not fetch) so we can show real upload progress —
-      // useful since lecture videos can be large and take a while
-      // to stream to the server (see videoUpload.middleware.js).
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", `${API_BASE}/teacher/courses/${videoForm.courseId}/videos/upload`);
         xhr.withCredentials = true;
         xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) {
-            setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
-          }
+          if (evt.lengthComputable) setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
         };
         xhr.onload = () => {
           let data = {};
-          try { data = JSON.parse(xhr.responseText); } catch { /* non-JSON error page */ }
+          try {
+            data = JSON.parse(xhr.responseText);
+          } catch {
+            // ignore non-JSON error body
+          }
           if (xhr.status >= 200 && xhr.status < 300) resolve(data);
           else reject(new Error(data.error || "Failed to upload video."));
         };
@@ -201,7 +214,7 @@ export default function TeacherDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to respond.");
-      fetchAll(); // refresh both requests list and real overview numbers
+      fetchAll();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -216,12 +229,20 @@ export default function TeacherDashboard() {
           <h1 className="text-lg font-semibold">Teacher Dashboard</h1>
           <p className="text-xs text-gray-500">Welcome, {user?.name}</p>
         </div>
-        <button
-          onClick={logout}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition"
-        >
-          <LogOut size={13} /> Log Out
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchAll}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition"
+          >
+            <RefreshCw size={13} /> Refresh
+          </button>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition"
+          >
+            <LogOut size={13} /> Log Out
+          </button>
+        </div>
       </header>
 
       <main className="p-6">
@@ -235,118 +256,135 @@ export default function TeacherDashboard() {
           <p className="text-sm text-gray-500">Loading...</p>
         ) : (
           <>
-            <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5 mb-6">
-              <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                <ShieldCheck size={16} className="text-purple-300" /> Teacher Verification
-              </h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Status: <span className="text-purple-300">{overview?.verificationStatus || "NOT_SUBMITTED"}</span>
-              </p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 mb-6">
+              <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-purple-300" /> Teacher Verification
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Status: <span className="text-purple-300">{overview?.verificationStatus || "NOT_SUBMITTED"}</span>
+                      {overview?.teacherVerifiedAt && (
+                        <> · Approved {new Date(overview.teacherVerifiedAt).toLocaleDateString("en-IN")}</>
+                      )}
+                    </p>
+                  </div>
+                </div>
 
-              {overview?.verificationStatus !== "APPROVED" && (
-                <form onSubmit={handleSubmitVerification} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    value={verificationForm.fullName}
-                    onChange={(e) => setVerificationForm((p) => ({ ...p, fullName: e.target.value }))}
-                    placeholder="Legal full name"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <input
-                    value={verificationForm.institute}
-                    onChange={(e) => setVerificationForm((p) => ({ ...p, institute: e.target.value }))}
-                    placeholder="Institute / organization"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <input
-                    value={verificationForm.qualification}
-                    onChange={(e) => setVerificationForm((p) => ({ ...p, qualification: e.target.value }))}
-                    placeholder="Qualification"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <input
-                    type="number"
-                    value={verificationForm.experienceYears}
-                    onChange={(e) => setVerificationForm((p) => ({ ...p, experienceYears: e.target.value }))}
-                    placeholder="Experience years"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <label className="text-xs text-gray-400">
-                    ID document
+                {overview?.verificationStatus !== "APPROVED" ? (
+                  <form onSubmit={handleSubmitVerification} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
-                      type="file"
-                      accept="application/pdf,image/png,image/jpeg"
-                      onChange={(e) => setVerificationForm((p) => ({ ...p, idDocument: e.target.files?.[0] || null }))}
-                      className="mt-1 block w-full text-xs"
+                      value={verificationForm.fullName}
+                      onChange={(e) => setVerificationForm((p) => ({ ...p, fullName: e.target.value }))}
+                      placeholder="Legal full name"
+                      className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
                     />
-                  </label>
-                  <label className="text-xs text-gray-400">
-                    Education document
                     <input
-                      type="file"
-                      accept="application/pdf,image/png,image/jpeg"
-                      onChange={(e) => setVerificationForm((p) => ({ ...p, educationDocument: e.target.files?.[0] || null }))}
-                      className="mt-1 block w-full text-xs"
+                      value={verificationForm.institute}
+                      onChange={(e) => setVerificationForm((p) => ({ ...p, institute: e.target.value }))}
+                      placeholder="Institute / organization"
+                      className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
                     />
-                  </label>
-                  <button
-                    type="submit"
-                    disabled={submittingVerification}
-                    className="md:col-span-2 bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    <Upload size={14} /> {submittingVerification ? "Submitting..." : "Submit for Review"}
-                  </button>
-                </form>
-              )}
+                    <input
+                      value={verificationForm.qualification}
+                      onChange={(e) => setVerificationForm((p) => ({ ...p, qualification: e.target.value }))}
+                      placeholder="Qualification"
+                      className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                    />
+                    <input
+                      type="number"
+                      value={verificationForm.experienceYears}
+                      onChange={(e) => setVerificationForm((p) => ({ ...p, experienceYears: e.target.value }))}
+                      placeholder="Experience years"
+                      className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                    />
+                    <label className="text-xs text-gray-400">
+                      ID document
+                      <input
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg"
+                        onChange={(e) => setVerificationForm((p) => ({ ...p, idDocument: e.target.files?.[0] || null }))}
+                        className="mt-1 block w-full text-xs"
+                      />
+                    </label>
+                    <label className="text-xs text-gray-400">
+                      Education document
+                      <input
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg"
+                        onChange={(e) => setVerificationForm((p) => ({ ...p, educationDocument: e.target.files?.[0] || null }))}
+                        className="mt-1 block w-full text-xs"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={submittingVerification}
+                      className="md:col-span-2 bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      <Upload size={14} /> {submittingVerification ? "Submitting..." : "Submit for Review"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-4 text-sm text-green-200">
+                    You are approved to publish courses in the marketplace.
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`rounded-2xl p-4 border ${
+                  overview?.razorpayRouteAccountId
+                    ? "bg-green-500/10 border-green-500/20"
+                    : "bg-yellow-500/10 border-yellow-500/20"
+                }`}
+              >
+                <h2 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                  {overview?.razorpayRouteAccountId ? (
+                    <Wallet size={16} className="text-green-300" />
+                  ) : (
+                    <AlertTriangle size={16} className="text-yellow-300" />
+                  )}
+                  Razorpay Route
+                </h2>
+                <p className="text-xs text-gray-400">
+                  {overview?.razorpayRouteAccountId
+                    ? "Route account linked. Teacher payouts can be transferred after payment capture."
+                    : "Route account not linked. Payouts stay NOT_READY until this is added in Settings."}
+                </p>
+                {overview?.razorpayRouteAccountId && (
+                  <p className="text-[10px] text-green-300 mt-2 font-mono break-all">{overview.razorpayRouteAccountId}</p>
+                )}
+              </div>
             </div>
 
-            {/* Real stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-              <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                  <BookOpen size={14} /> Total Courses
-                </div>
-                <p className="text-2xl font-semibold">{overview?.totalCourses ?? 0}</p>
-              </div>
-              <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                  <Users size={14} /> Total Students
-                </div>
-                <p className="text-2xl font-semibold">{overview?.totalStudents ?? 0}</p>
-              </div>
-              <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                  <IndianRupee size={14} /> Total Earnings
-                </div>
-                <p className="text-2xl font-semibold">₹{(overview?.totalEarnings ?? 0).toLocaleString("en-IN")}</p>
-              </div>
-              <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                  <Clock3 size={14} /> Pending Requests
-                </div>
-                <p className="text-2xl font-semibold text-yellow-400">{overview?.pendingRequestCount ?? 0}</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <StatCard icon={BookOpen} label="Total Courses" value={overview?.totalCourses ?? 0} />
+              <StatCard icon={Users} label="Approved Students" value={overview?.totalStudents ?? 0} />
+              <StatCard icon={Clock3} label="Pending Requests" value={overview?.pendingRequestCount ?? 0} tone="text-yellow-400" />
+              <StatCard icon={Video} label="Paid Payments" value={overview?.paidPaymentCount ?? 0} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <StatCard icon={IndianRupee} label="Gross Revenue" value={formatMoneyPaise(overview?.grossRevenuePaise)} tone="text-green-400" />
+              <StatCard icon={IndianRupee} label="Teacher Earnings" value={formatMoneyPaise(overview?.teacherEarningsPaise)} tone="text-purple-300" />
+              <StatCard icon={Wallet} label="Paid Out" value={formatMoneyPaise(overview?.paidOutPaise)} tone="text-green-300" />
+              <StatCard icon={Clock3} label="Pending Payout" value={formatMoneyPaise(overview?.pendingPayoutPaise)} tone="text-yellow-300" />
             </div>
 
-            {/* Enrollment Requests — the approval queue */}
             <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5 mb-6">
               <h2 className="text-sm font-semibold mb-4">Enrollment Requests</h2>
 
               {requests.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">
-                  No pending requests right now.
-                </p>
+                <p className="text-sm text-gray-500 text-center py-6">No pending requests right now.</p>
               ) : (
                 <div className="space-y-3">
                   {requests.map((r) => (
-                    <div
-                      key={r.enrollmentId}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 rounded-xl p-3"
-                    >
+                    <div key={r.enrollmentId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 rounded-xl p-3">
                       <div>
                         <p className="font-medium text-sm">{r.studentName}</p>
                         <p className="text-xs text-gray-500">{r.studentEmail}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          Wants: <span className="text-purple-300">{r.courseTitle}</span> · ₹{r.coursePrice}
+                          Wants: <span className="text-purple-300">{r.courseTitle}</span> · {formatMoneyRupees(r.coursePrice)}
                         </p>
                         <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                           <Phone size={11} /> {r.contactNumber}
@@ -375,7 +413,6 @@ export default function TeacherDashboard() {
               )}
             </div>
 
-            {/* My Courses */}
             <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold">My Courses</h2>
@@ -389,31 +426,10 @@ export default function TeacherDashboard() {
 
               {showForm && (
                 <form onSubmit={handleCreateCourse} className="bg-white/5 rounded-xl p-4 mb-4 flex flex-col gap-3">
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Course title"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Short description (optional)"
-                    rows={2}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500 resize-none"
-                  />
-                  <input
-                    type="number"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="Price in ₹ (0 for free)"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={creating || overview?.verificationStatus !== "APPROVED"}
-                    className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60"
-                  >
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Course title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short description (optional)" rows={2} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500 resize-none" />
+                  <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price in Rs (0 for free)" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+                  <button type="submit" disabled={creating || overview?.verificationStatus !== "APPROVED"} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60">
                     {creating ? "Creating..." : overview?.verificationStatus === "APPROVED" ? "Create Course" : "Verification Required"}
                   </button>
                 </form>
@@ -421,56 +437,38 @@ export default function TeacherDashboard() {
 
               {overview?.courses?.length > 0 && (
                 <form onSubmit={handleUploadVideo} className="bg-white/5 rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <select
-                    value={videoForm.courseId}
-                    onChange={(e) => setVideoForm((p) => ({ ...p, courseId: e.target.value }))}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  >
+                  <select value={videoForm.courseId} onChange={(e) => setVideoForm((p) => ({ ...p, courseId: e.target.value }))} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500">
                     <option value="">Select course</option>
                     {overview.courses.map((c) => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}
                   </select>
-                  <input
-                    value={videoForm.title}
-                    onChange={(e) => setVideoForm((p) => ({ ...p, title: e.target.value }))}
-                    placeholder="Lesson title"
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
-                  />
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime"
-                    onChange={(e) => setVideoForm((p) => ({ ...p, videoFile: e.target.files?.[0] || null }))}
-                    className="text-xs text-gray-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={uploadingVideo}
-                    className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
+                  <input value={videoForm.title} onChange={(e) => setVideoForm((p) => ({ ...p, title: e.target.value }))} placeholder="Lesson title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+                  <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(e) => setVideoForm((p) => ({ ...p, videoFile: e.target.files?.[0] || null }))} className="text-xs text-gray-400" />
+                  <button type="submit" disabled={uploadingVideo} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                     <Video size={14} /> {uploadingVideo ? `Uploading... ${uploadProgress}%` : "Add Video"}
                   </button>
                 </form>
               )}
 
               {(!overview?.courses || overview.courses.length === 0) ? (
-                <p className="text-sm text-gray-500 text-center py-6">
-                  No courses yet — create your first one above.
-                </p>
+                <p className="text-sm text-gray-500 text-center py-6">No courses yet. Create your first one above.</p>
               ) : (
                 <div className="space-y-3">
                   {overview.courses.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
-                      <div>
-                        <p className="font-medium text-sm">{c.title}</p>
+                    <div key={c.id} className="flex items-center justify-between bg-white/5 rounded-xl p-3 gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{c.title}</p>
                         <p className="text-xs text-gray-500">
-                          ₹{c.price} · {c.studentsEnrolled} students
-                          {c.pendingRequests > 0 && (
-                            <span className="text-yellow-400"> · {c.pendingRequests} pending</span>
-                          )}
+                          {formatMoneyRupees(c.price)} · {c.studentsEnrolled} students · {c.videoCount} videos
+                          {c.pendingRequests > 0 && <span className="text-yellow-400"> · {c.pendingRequests} pending</span>}
+                          {c.previewVideoCount > 0 && <span className="text-purple-300"> · {c.previewVideoCount} preview</span>}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-green-400">₹{c.earnings.toLocaleString("en-IN")}</p>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-semibold text-green-400">{formatMoneyPaise(c.teacherEarningsPaise)}</p>
+                        <p className="text-[10px] text-gray-500">{c.paidPayments} paid payments</p>
+                      </div>
                     </div>
                   ))}
                 </div>
