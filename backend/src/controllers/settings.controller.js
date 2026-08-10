@@ -35,6 +35,18 @@ const ALLOWED_FIELDS = [
 // lowercase strings on the frontend
 const ENUM_FIELDS = ["focusSensitivity", "theme"];
 
+function themeToFrontend(theme) {
+  const value = String(theme || "DARK").toLowerCase();
+  return value === "light" ? "bright" : value;
+}
+
+function themeToPrisma(theme) {
+  const value = String(theme || "").toLowerCase();
+  if (value === "bright") return "LIGHT";
+  if (value === "purple") return "PURPLE";
+  return "DARK";
+}
+
 const formatUser = (user) => ({
   name: user.name,
   avatarUrl: user.avatarUrl,
@@ -56,7 +68,7 @@ const formatUser = (user) => ({
   reminderTime: user.reminderTime,
   streakAlertOn: user.streakAlertOn,
   weeklySummaryOn: user.weeklySummaryOn,
-  theme: user.theme.toLowerCase(),
+  theme: themeToFrontend(user.theme),
   accentColor: user.accentColor,
   // Never send the full key back — mask() shows just enough
   // (prefix + last 4 chars) for the student to recognize which
@@ -99,6 +111,8 @@ const updateSettings = async (req, res) => {
           // Empty string / null clears the saved key (falls back to
           // shared Gemini tier); anything else gets encrypted at rest.
           data[key] = body[key] ? encrypt(body[key]) : null;
+        } else if (key === "theme") {
+          data[key] = themeToPrisma(body[key]);
         } else {
           data[key] = ENUM_FIELDS.includes(key)
             ? String(body[key]).toUpperCase()
