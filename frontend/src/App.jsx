@@ -26,6 +26,7 @@ import ClassesMarketplace from "./pages/ClassesMarketplace";
 import QuizGenerator from "./pages/QuizGenerator";
 import DigitalId from "./pages/DigitalId";
 import VerifyId from "./pages/VerifyId";
+import Subscription from "./pages/Subscription";
 import HeyForgeWidget from "./components/HeyForgeWidget";
 
 export default function App() {
@@ -88,6 +89,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
                 <DigitalId />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/subscription"
+            element={
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
+                <Subscription />
               </ProtectedRoute>
             }
           />
