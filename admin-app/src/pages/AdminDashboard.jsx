@@ -19,6 +19,8 @@ import {
   Ban,
   Wallet,
   RotateCw,
+  BadgeCheck,
+  ReceiptText,
 } from "lucide-react";
 
 // ---------------------------------------------------------
@@ -53,13 +55,33 @@ function formatMoney(paise) {
 
 function StatCard({ icon: Icon, label, value, tone = "text-gray-100" }) {
   return (
-    <div className="bg-[#13131f] rounded-2xl p-4 border border-white/5">
+    <div className="bg-[#13131f] rounded-xl p-4 border border-white/5">
       <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
         <Icon size={14} /> {label}
       </div>
       <p className={`text-2xl font-semibold ${tone}`}>{value}</p>
     </div>
   );
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function StatusPill({ value }) {
+  const tone =
+    value === "PAID" || value === "ACTIVE" || value === "APPROVED"
+      ? "bg-green-500/15 text-green-300 border-green-500/20"
+      : value === "PENDING" || value === "CREATED" || value === "REQUESTED"
+        ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/20"
+        : "bg-red-500/15 text-red-300 border-red-500/20";
+  return <span className={`text-[10px] px-2 py-1 rounded-full border ${tone}`}>{value}</span>;
 }
 
 export default function AdminDashboard() {
@@ -392,12 +414,71 @@ export default function AdminDashboard() {
                   value={overview?.pendingStudyRoomReports ?? 0}
                   tone={overview?.pendingStudyRoomReports > 0 ? "text-yellow-400" : "text-gray-100"}
                 />
-                <StatCard icon={IndianRupee} label="Total Revenue" value={formatMoney(overview?.totalRevenuePaise)} tone="text-green-400" />
-                <StatCard icon={Undo2} label="Total Refunded" value={formatMoney(overview?.totalRefundedPaise)} tone="text-red-300" />
+                <StatCard icon={BadgeCheck} label="Active Digital IDs" value={overview?.activeDigitalIds ?? 0} tone="text-green-300" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
+                <StatCard icon={IndianRupee} label="Gross Revenue" value={formatMoney(overview?.totalRevenuePaise)} tone="text-green-400" />
+                <StatCard icon={Undo2} label="Refunded" value={formatMoney(overview?.totalRefundedPaise)} tone="text-red-300" />
+                <StatCard icon={IndianRupee} label="Net Revenue" value={formatMoney(overview?.netRevenuePaise)} tone="text-purple-300" />
+                <StatCard icon={ReceiptText} label="Paid Payments" value={overview?.paidPaymentCount ?? 0} />
                 <StatCard icon={BookOpen} label="Total Courses" value={overview?.totalCourses ?? 0} />
                 <StatCard icon={Users} label="Active Enrollments" value={overview?.totalEnrollments ?? 0} />
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-6">
+                <section className="bg-[#13131f] rounded-xl border border-white/5 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">Recent Users</h2>
+                    <span className="text-[10px] text-gray-500">latest 8</span>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {(overview?.recentUsers || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 p-4">No users yet.</p>
+                    ) : (
+                      overview.recentUsers.map((u) => (
+                        <div key={u.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-100 truncate">{u.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{u.email}</p>
+                            <p className="text-[10px] text-gray-600 mt-0.5">{formatDateTime(u.createdAt)}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <StatusPill value={u.role} />
+                            <span className={`text-[10px] ${u.emailVerifiedAt || u.mobileVerifiedAt ? "text-green-400" : "text-yellow-400"}`}>
+                              {u.emailVerifiedAt || u.mobileVerifiedAt ? "verified" : "unverified"}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="bg-[#13131f] rounded-xl border border-white/5 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">Recent Payments</h2>
+                    <span className="text-[10px] text-gray-500">latest 8</span>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {(overview?.recentPayments || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 p-4">No payments yet.</p>
+                    ) : (
+                      overview.recentPayments.map((p) => (
+                        <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-100 truncate">{p.courseTitle}</p>
+                            <p className="text-xs text-gray-500 truncate">{p.studentName} · {p.studentEmail}</p>
+                            <p className="text-[10px] text-gray-600 mt-0.5">{formatDateTime(p.paidAt || p.createdAt)}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <p className="text-sm font-semibold text-green-400">{formatMoney(p.amountPaise)}</p>
+                            <StatusPill value={p.status} />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
               </div>
             </>
           )
