@@ -159,6 +159,10 @@ function getTransporter() {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: Number(process.env.SMTP_PORT) === 465, // true for port 465, false for 587/others
+    family: 4, // Render can fail Gmail's IPv6 route; force IPv4 for SMTP.
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
