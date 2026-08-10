@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { requireAuth, requireRole } = require("../middleware/auth.middleware");
+const { requireAuth } = require("../middleware/auth.middleware");
 const { requireParentalConsentIfMinor } = require("../middleware/ageGate.middleware");
 const {
   getMySubscription,
@@ -10,15 +10,34 @@ const {
   verifySubscriptionPayment,
 } = require("../controllers/subscription.controller");
 
-router.get("/me", requireAuth, requireRole("STUDENT"), getMySubscription);
-router.post("/trial", requireAuth, requireRole("STUDENT"), startTrial);
+function requireStudentOrParent(req, res, next) {
+  if (!["STUDENT", "PARENT"].includes(req.user?.role)) {
+    return res.status(403).json({ error: "You don't have permission to do this." });
+  }
+  next();
+}
+
+function requireStudent(req, res, next) {
+  if (req.user?.role !== "STUDENT") {
+    return res.status(403).json({ error: "Only student accounts can start a trial." });
+  }
+  next();
+}
+
+function parentalConsentForStudentsOnly(req, res, next) {
+  if (req.user?.role !== "STUDENT") return next();
+  return requireParentalConsentIfMinor(req, res, next);
+}
+
+router.get("/me", requireAuth, requireStudentOrParent, getMySubscription);
+router.post("/trial", requireAuth, requireStudent, startTrial);
 router.post(
   "/order",
   requireAuth,
-  requireRole("STUDENT"),
-  requireParentalConsentIfMinor,
+  requireStudentOrParent,
+  parentalConsentForStudentsOnly,
   createSubscriptionOrder
 );
-router.post("/verify", requireAuth, requireRole("STUDENT"), verifySubscriptionPayment);
+router.post("/verify", requireAuth, requireStudentOrParent, verifySubscriptionPayment);
 
 module.exports = router;
