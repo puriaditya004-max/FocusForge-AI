@@ -63,6 +63,7 @@ export default function Subscription() {
   const [message, setMessage] = useState("");
   const [workingPlan, setWorkingPlan] = useState("");
   const [startingTrial, setStartingTrial] = useState(false);
+  const isParent = user?.role === "PARENT";
 
   useEffect(() => {
     fetchSubscription();
@@ -175,6 +176,7 @@ export default function Subscription() {
     }
   }
 
+  const visiblePlans = Object.entries(PLAN_COPY).filter(([planId]) => !isParent || planId === "FAMILY");
   const status = subscription?.status || "NONE";
   const statusClass =
     status === "ACTIVE"
@@ -197,7 +199,9 @@ export default function Subscription() {
               <Crown className="text-purple-400" size={22} />
               Subscription
             </h1>
-            <p className="text-sm text-gray-400 mt-1">Manage your FocusForge trial and paid access.</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {isParent ? "Manage Family Plan access for linked students." : "Manage your FocusForge trial and paid access."}
+            </p>
           </div>
 
           {loading ? (
@@ -217,9 +221,14 @@ export default function Subscription() {
                     <p className="text-xs text-gray-500 mt-3">
                       Access ends: <span className="text-gray-300">{formatDate(subscription?.accessEndsAt)}</span>
                     </p>
+                    {subscription?.source === "FAMILY_PARENT" && subscription?.owner && (
+                      <p className="text-xs text-green-300 mt-3">
+                        Family access via {subscription.owner.name}.
+                      </p>
+                    )}
                   </div>
 
-                  {subscription?.trialAvailable && (
+                  {subscription?.trialAvailable && !isParent && (
                     <button
                       onClick={startTrial}
                       disabled={startingTrial}
@@ -245,7 +254,7 @@ export default function Subscription() {
               {message && <div className="bg-green-500/10 border border-green-500/20 text-green-300 rounded-xl p-3 text-sm">{message}</div>}
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {Object.entries(PLAN_COPY).map(([planId, copy]) => {
+                {visiblePlans.map(([planId, copy]) => {
                   const serverPlan = plans[planId] || {};
                   return (
                     <section key={planId} className="bg-[#13131f] border border-white/5 rounded-2xl p-5 flex flex-col">
