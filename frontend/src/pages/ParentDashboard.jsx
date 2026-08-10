@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Activity,
   BookOpen,
+  Crown,
   ShieldCheck,
   Hourglass,
 } from "lucide-react";
@@ -40,6 +41,8 @@ export default function ParentDashboard() {
   const { user, logout } = useAuth();
   const [children, setChildren] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [subscription, setSubscription] = useState(null);
+  const [familySeats, setFamilySeats] = useState({ used: 0, limit: 3, available: 3 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -73,6 +76,8 @@ export default function ParentDashboard() {
       if (!res.ok) throw new Error(data.error || "Failed to load overview.");
       setChildren(data.children || []);
       setPendingRequests(data.pendingRequests || []);
+      setSubscription(data.subscription || null);
+      setFamilySeats(data.familySeats || { used: 0, limit: 3, available: 3 });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -183,6 +188,29 @@ export default function ParentDashboard() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="bg-[#13131f] rounded-2xl p-4 border border-purple-500/20 mb-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <Crown size={16} className="text-purple-300" /> Family Plan
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                {familySeats.used}/{familySeats.limit} student seats linked. Approved students can inherit premium access from an active Family Plan.
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                Current status: <span className="text-purple-300">{subscription?.status || "NONE"}</span>
+                {subscription?.plan ? ` · ${subscription.plan}` : ""}
+              </p>
+            </div>
+            <button
+              onClick={() => { window.location.href = "/subscription"; }}
+              className="bg-purple-600 hover:bg-purple-700 transition text-white px-4 py-2 rounded-lg text-sm"
+            >
+              {subscription?.plan === "FAMILY" ? "Manage Plan" : "Activate Family Plan"}
+            </button>
+          </div>
         </div>
 
         {loading ? (
