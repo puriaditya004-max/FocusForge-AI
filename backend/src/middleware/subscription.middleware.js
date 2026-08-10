@@ -44,7 +44,27 @@ async function requirePremiumAccess(req, res, next) {
       return next();
     }
 
-    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    const ownSubscription = await prisma.subscription.findUnique({ where: { userId } });
+    let subscription = ownSubscription;
+
+    if (!hasPremiumAccess(subscription)) {
+      const familyLink = await prisma.studentParentLink.findFirst({
+        where: {
+          studentId: userId,
+          status: "APPROVED",
+          parent: {
+            subscription: {
+              plan: "FAMILY",
+              status: { in: ["ACTIVE", "TRIALING"] },
+            },
+          },
+        },
+        include: { parent: { include: { subscription: true } } },
+        orderBy: { connectedAt: "asc" },
+      });
+      subscription = familyLink?.parent?.subscription || ownSubscription;
+    }
+
     if (!hasPremiumAccess(subscription)) {
       return res.status(402).json({
         code: "SUBSCRIPTION_REQUIRED",
