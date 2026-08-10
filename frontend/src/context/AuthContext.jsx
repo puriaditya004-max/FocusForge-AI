@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { applyTheme } from "../utils/theme";
 
 // ---------------------------------------------------------
 // AuthContext — single source of truth for "who is logged in".
@@ -30,6 +31,7 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+        applyTheme(data.user?.theme);
       } else {
         setUser(null);
       }
@@ -52,6 +54,7 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || "Signup failed. Please try again.");
     }
     setUser(data.user);
+    applyTheme(data.user?.theme);
     return data.user;
   }
 
@@ -67,6 +70,7 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || "Login failed. Please try again.");
     }
     setUser(data.user);
+    applyTheme(data.user?.theme);
     return data.user;
   }
 
