@@ -105,6 +105,24 @@ export default function Subscription() {
     }
   }
 
+  async function reportSubscriptionPaymentIssue(orderId, paymentId) {
+    if (!orderId) return;
+
+    try {
+      await fetch(`${API_BASE}/subscription/fail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+        }),
+      });
+    } catch {
+      // The checkout result shown to the user should not depend on best-effort telemetry.
+    }
+  }
+
   async function activatePlan(planId) {
     if (PLAY_STORE_BUILD) {
       setError("Play Store builds need Google Play Billing or India Alternative Billing enrollment before Razorpay checkout.");
@@ -156,11 +174,17 @@ export default function Subscription() {
             }
           },
           modal: {
-            ondismiss: () => reject(new Error("Payment was cancelled before completion.")),
+            ondismiss: async () => {
+              await reportSubscriptionPaymentIssue(orderData.order.id);
+              const cancelled = new Error("Payment cancelled. No charge was made.");
+              cancelled.code = "PAYMENT_CANCELLED";
+              reject(cancelled);
+            },
           },
         });
 
-        checkout.on("payment.failed", (response) => {
+        checkout.on("payment.failed", async (response) => {
+          await reportSubscriptionPaymentIssue(orderData.order.id, response?.error?.metadata?.payment_id);
           reject(new Error(response?.error?.description || "Payment failed. Please try again."));
         });
 
@@ -170,7 +194,11 @@ export default function Subscription() {
       await fetchSubscription();
       setMessage("Subscription activated successfully.");
     } catch (err) {
-      setError(err.message || "Failed to activate subscription.");
+      if (err.code === "PAYMENT_CANCELLED") {
+        setMessage(err.message);
+      } else {
+        setError(err.message || "Failed to activate subscription.");
+      }
     } finally {
       setWorkingPlan("");
     }
