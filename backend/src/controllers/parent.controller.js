@@ -19,10 +19,18 @@ async function getStudentSnapshot(studentId) {
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
-  const [student, todaysTasks, todaysSessions, weekSessions] = await Promise.all([
+  const [student, todaysTasks, todaysSessions, weekSessions, currentRoadmap, recentActivity] = await Promise.all([
     prisma.user.findUnique({
       where: { id: studentId },
-      select: { id: true, name: true, level: true, xp: true, currentStreak: true },
+      select: {
+        id: true,
+        name: true,
+        level: true,
+        xp: true,
+        currentStreak: true,
+        longestStreak: true,
+        dailyGoalHours: true,
+      },
     }),
     prisma.task.findMany({
       where: { userId: studentId, date: { gte: startOfDay, lte: endOfDay } },
@@ -35,6 +43,17 @@ async function getStudentSnapshot(studentId) {
         userId: studentId,
         startedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
       },
+    }),
+    prisma.roadmapItem.findFirst({
+      where: { userId: studentId, status: { not: "COMPLETED" } },
+      orderBy: { weekNumber: "asc" },
+      select: { weekNumber: true, monthLabel: true, title: true, status: true },
+    }),
+    prisma.activityLog.findMany({
+      where: { userId: studentId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { id: true, icon: true, text: true, xp: true, createdAt: true },
     }),
   ]);
 
@@ -54,11 +73,22 @@ async function getStudentSnapshot(studentId) {
     level: student.level,
     xp: student.xp,
     currentStreak: student.currentStreak,
+    longestStreak: student.longestStreak,
+    dailyGoalHours: student.dailyGoalHours,
     tasksCompletedToday: tasksCompleted,
     tasksTotalToday: todaysTasks.length,
     studyHoursToday: +(studySecondsToday / 3600).toFixed(1),
     studyHoursThisWeek: +(weekStudySeconds / 3600).toFixed(1),
     focusScoreThisWeek: avgFocusScore,
+    currentFocus: currentRoadmap
+      ? {
+          weekNumber: currentRoadmap.weekNumber,
+          monthLabel: currentRoadmap.monthLabel,
+          title: currentRoadmap.title,
+          status: currentRoadmap.status,
+        }
+      : null,
+    recentActivity,
   };
 }
 
@@ -70,19 +100,32 @@ async function getOverview(req, res) {
 
     // Only APPROVED links can expose a student's data to a parent.
     // Pending/rejected requests must never show up here.
-    const links = await prisma.studentParentLink.findMany({
-      where: { parentId, status: "APPROVED" },
-    });
-
-    if (links.length === 0) {
-      return res.json({ children: [], linked: false });
-    }
+    const [links, pendingLinks] = await Promise.all([
+      prisma.studentParentLink.findMany({
+        where: { parentId, status: "APPROVED" },
+      }),
+      prisma.studentParentLink.findMany({
+        where: { parentId, status: "PENDING" },
+        include: { student: { select: { id: true, name: true, email: true } } },
+        orderBy: { connectedAt: "desc" },
+      }),
+    ]);
 
     const children = await Promise.all(
       links.map((link) => getStudentSnapshot(link.studentId))
     );
 
-    return res.json({ children: children.filter(Boolean), linked: true });
+    return res.json({
+      children: children.filter(Boolean),
+      linked: links.length > 0,
+      pendingRequests: pendingLinks.map((link) => ({
+        id: link.id,
+        studentId: link.student.id,
+        studentName: link.student.name,
+        studentEmail: link.student.email,
+        requestedAt: link.connectedAt,
+      })),
+    });
   } catch (err) {
     logger.error("Parent getOverview error:", err);
     return res.status(500).json({ error: "Failed to load parent overview." });
