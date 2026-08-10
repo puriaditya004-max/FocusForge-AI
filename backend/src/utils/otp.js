@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const dns = require("dns").promises;
 const logger = require("./logger");
 let nodemailer;
 try {
@@ -151,18 +152,37 @@ async function deliverOtp({ channel, target, code }) {
 // then to a dev-only console log if nothing is configured.
 // ---------------------------------------------------------
 let cachedTransporter = null;
-function getTransporter() {
+async function resolveSmtpHost(host) {
+  try {
+    const [ipv4] = await dns.resolve4(host);
+    if (ipv4) return ipv4;
+  } catch (err) {
+    logger.warn("SMTP IPv4 DNS lookup failed; falling back to hostname", {
+      host,
+      error: err.message,
+    });
+  }
+  return host;
+}
+
+async function getTransporter() {
   if (cachedTransporter) return cachedTransporter;
   if (!nodemailer || !process.env.SMTP_HOST) return null;
 
+  const smtpHost = process.env.SMTP_HOST;
+  const resolvedHost = await resolveSmtpHost(smtpHost);
+
   cachedTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host: resolvedHost,
     port: Number(process.env.SMTP_PORT || 587),
     secure: Number(process.env.SMTP_PORT) === 465, // true for port 465, false for 587/others
     family: 4, // Render can fail Gmail's IPv6 route; force IPv4 for SMTP.
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 30000,
+    tls: {
+      servername: smtpHost,
+    },
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -172,7 +192,7 @@ function getTransporter() {
 }
 
 async function deliverEmail(target, code) {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
 
   if (transporter) {
     const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER;
