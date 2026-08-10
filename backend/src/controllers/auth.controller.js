@@ -165,7 +165,7 @@ async function requestOtp(req, res) {
     });
   } catch (err) {
     logger.error("requestOtp error:", err);
-    return res.status(500).json({ error: "Failed to send OTP." });
+    return res.status(err.status || 500).json({ error: err.message || "Failed to send OTP." });
   }
 }
 
