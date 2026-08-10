@@ -11,20 +11,10 @@ import {
   Mail,
   Smartphone,
   Loader2,
+  Copy,
+  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
-
-// ---------------------------------------------------------
-// DigitalId Page
-// Shows the student's auto-generated Digital ID card. On first
-// visit the backend issues one (GET /api/digital-id/me), as long
-// as email or mobile has actually been verified — otherwise it
-// shows a clear "verify first" state instead of a blank card.
-//
-// The QR code encodes a public verify URL (no login needed) so
-// anyone scanning the card — a teacher, a parent, a proctor —
-// can confirm it's real without ever seeing the student's email,
-// mobile, or date of birth.
-// ---------------------------------------------------------
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -43,6 +33,7 @@ export default function DigitalId() {
   const [otpError, setOtpError] = useState("");
   const [requestingOtp, setRequestingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
   const cardRef = useRef(null);
 
   useEffect(() => {
@@ -63,9 +54,7 @@ export default function DigitalId() {
         setVerifyTarget(user?.email || "");
         return;
       }
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to load Digital ID.");
-      }
+      if (!res.ok) throw new Error(data.error || "Failed to load Digital ID.");
 
       setCard(data.card);
       setHolder(data.holder || null);
@@ -148,12 +137,11 @@ export default function DigitalId() {
       const verifyUrl = `${window.location.origin}/verify-id/${token}`;
       const dataUrl = await QRCode.toDataURL(verifyUrl, {
         margin: 1,
-        width: 180,
+        width: 220,
         color: { dark: "#111827", light: "#ffffff" },
       });
       setQrDataUrl(dataUrl);
-    } catch (err) {
-      // QR is a nice-to-have on top of the card — don't fail the whole page over it.
+    } catch {
       setQrDataUrl(null);
     }
   }
@@ -162,16 +150,33 @@ export default function DigitalId() {
     if (!cardRef.current) return;
     import("html2canvas")
       .then(({ default: html2canvas }) => {
-        html2canvas(cardRef.current, { scale: 2, backgroundColor: null }).then((canvas) => {
+        html2canvas(cardRef.current, { scale: 3, backgroundColor: null }).then((canvas) => {
           const link = document.createElement("a");
-          link.download = `FocusForge_Digital_ID.png`;
+          link.download = `FocusForge_Digital_ID_${card?.cardNumber || "card"}.png`;
           link.href = canvas.toDataURL();
           link.click();
         });
       })
       .catch(() => {
-        alert("html2canvas not installed. Run: npm install html2canvas");
+        alert("Could not prepare the card image. Please try again.");
       });
+  }
+
+  async function copyVerifyLink() {
+    if (!card?.verifyToken) return;
+    const verifyUrl = `${window.location.origin}/verify-id/${card.verifyToken}`;
+    try {
+      await navigator.clipboard.writeText(verifyUrl);
+      setCopyStatus("Copied");
+    } catch {
+      setCopyStatus("Copy failed");
+    }
+    setTimeout(() => setCopyStatus(""), 1500);
+  }
+
+  function openVerifyPage() {
+    if (!card?.verifyToken) return;
+    window.open(`/verify-id/${card.verifyToken}`, "_blank", "noopener,noreferrer");
   }
 
   const issueDate = card
@@ -179,6 +184,13 @@ export default function DigitalId() {
     : "";
   const displayName = holder?.name || user?.name || "Student";
   const displayRole = holder?.role || user?.role || "STUDENT";
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "S";
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -186,13 +198,15 @@ export default function DigitalId() {
       <main className="flex-1 flex flex-col">
         <TopBar userName={displayName} streak={user?.currentStreak || 0} level={user?.level || 1} />
 
-        <div className="px-6 mt-4 mb-8 flex flex-col items-center gap-5">
-          <div className="text-center">
-            <h1 className="text-lg font-semibold flex items-center justify-center gap-2">
-              <Contact className="text-purple-400" size={20} />
+        <div className="px-4 md:px-6 mt-4 mb-8 flex flex-col items-center gap-5">
+          <div className="text-center max-w-xl">
+            <h1 className="text-xl font-semibold flex items-center justify-center gap-2">
+              <Contact className="text-purple-400" size={21} />
               Digital ID Card
             </h1>
-            <p className="text-sm text-gray-400">Your verified FocusForge identity, issued once and always yours.</p>
+            <p className="text-sm text-gray-400 mt-1">
+              A scannable FocusForge identity card for student verification checks.
+            </p>
           </div>
 
           {loading && <p className="text-sm text-gray-400 mt-8">Loading your Digital ID...</p>}
@@ -282,66 +296,106 @@ export default function DigitalId() {
           )}
 
           {!loading && card && (
-            <>
+            <div className="grid grid-cols-1 xl:grid-cols-[420px_320px] gap-5 items-start">
               <div
                 ref={cardRef}
-                className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden text-white"
+                className="w-full max-w-[420px] rounded-2xl shadow-2xl overflow-hidden text-white border border-white/15"
                 style={{
-                  background: "linear-gradient(135deg, #4c1d95 0%, #6d28d9 45%, #1e1b4b 100%)",
-                  fontFamily: "Georgia, serif",
+                  background: "linear-gradient(135deg, #1e1238 0%, #4c1d95 42%, #111827 100%)",
+                  fontFamily: "Inter, system-ui, sans-serif",
                 }}
               >
                 <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-white/15">
                   <div>
-                    <p className="text-[10px] tracking-[0.3em] uppercase font-sans font-semibold text-purple-200">
+                    <p className="text-[10px] tracking-[0.28em] uppercase font-semibold text-purple-200">
                       FocusForge AI
                     </p>
-                    <p className="text-sm font-sans text-purple-100">Digital ID</p>
+                    <p className="text-sm text-purple-100">Verified Digital Identity</p>
                   </div>
-                  <ShieldCheck className="text-green-300" size={22} />
-                </div>
-
-                <div className="px-6 py-5 flex gap-4 items-center">
-                  <div className="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center text-2xl font-bold flex-shrink-0 font-sans">
-                    {displayName.charAt(0)?.toUpperCase() || "S"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-bold truncate">{displayName}</p>
-                    <p className="text-xs font-sans text-purple-200 uppercase tracking-wide">{displayRole}</p>
-                    <p className="text-xs font-sans text-purple-200 mt-1">Issued {issueDate}</p>
+                  <div className="flex items-center gap-1.5 rounded-full bg-green-400/15 border border-green-300/25 px-2.5 py-1">
+                    <ShieldCheck className="text-green-300" size={14} />
+                    <span className="text-[10px] font-semibold text-green-200">{card.status}</span>
                   </div>
                 </div>
 
-                <div className="px-6 pb-5 flex items-end justify-between">
+                <div className="px-6 py-5">
+                  <div className="flex gap-4 items-center">
+                    <div className="w-20 h-20 rounded-2xl bg-white/12 border border-white/15 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+                      {initials}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xl font-bold truncate">{displayName}</p>
+                      <p className="text-xs text-purple-200 uppercase tracking-[0.18em] mt-1">{displayRole}</p>
+                      <p className="text-xs text-purple-200 mt-2">Issued {issueDate}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-5">
+                    <div className="rounded-xl bg-white/8 border border-white/10 p-3">
+                      <p className="text-[10px] text-purple-200 uppercase tracking-wider mb-1">Card Number</p>
+                      <p className="text-sm font-mono break-all">{card.cardNumber}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/8 border border-white/10 p-3">
+                      <p className="text-[10px] text-purple-200 uppercase tracking-wider mb-1">Verification</p>
+                      <p className="text-sm font-semibold flex items-center gap-1 text-green-200">
+                        <CheckCircle2 size={14} /> QR Active
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 pb-5 flex items-end justify-between gap-4">
                   <div>
-                    <p className="text-[10px] text-purple-300 font-sans uppercase tracking-wider mb-1">Card Number</p>
-                    <p className="text-sm font-mono">{card.cardNumber}</p>
-                    <p className="text-[10px] text-purple-300 font-sans mt-2">
-                      Status: <span className={card.status === "ACTIVE" ? "text-green-300" : "text-red-300"}>{card.status}</span>
+                    <p className="text-[10px] text-purple-300 uppercase tracking-wider mb-1">Public Check</p>
+                    <p className="text-xs text-purple-100 max-w-[210px]">
+                      Scan to confirm this card without exposing email, mobile, or date of birth.
                     </p>
                   </div>
                   {qrDataUrl && (
-                    <img src={qrDataUrl} alt="Scan to verify" className="w-20 h-20 rounded-lg bg-white p-1" />
+                    <img src={qrDataUrl} alt="Scan to verify" className="w-24 h-24 rounded-xl bg-white p-1.5" />
                   )}
                 </div>
 
-                <div className="h-2 bg-gradient-to-r from-purple-400 via-fuchsia-400 to-purple-400" />
+                <div className="h-2 bg-gradient-to-r from-purple-400 via-fuchsia-400 to-green-300" />
               </div>
 
-              <div className="flex gap-3 flex-wrap justify-center">
-                <button
-                  onClick={downloadCard}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm"
-                >
-                  <Download size={16} /> Download ID Card
-                </button>
+              <div className="w-full max-w-[420px] xl:max-w-none rounded-2xl bg-white/5 border border-white/10 p-5">
+                <h2 className="text-sm font-semibold text-gray-100 mb-3">Card Actions</h2>
+                <div className="grid gap-2">
+                  <button
+                    onClick={downloadCard}
+                    className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+                  >
+                    <Download size={16} /> Download ID Card
+                  </button>
+                  <button
+                    onClick={copyVerifyLink}
+                    className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+                  >
+                    <Copy size={16} /> Copy Verification Link
+                  </button>
+                  <button
+                    onClick={openVerifyPage}
+                    className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold px-5 py-2.5 rounded-xl transition text-sm"
+                  >
+                    <ExternalLink size={16} /> Open Public Check
+                  </button>
+                </div>
+                {copyStatus && <p className="text-xs text-green-400 text-center mt-3">{copyStatus}</p>}
+                <div className="mt-5 pt-4 border-t border-white/10">
+                  <p className="text-[11px] text-gray-500 mb-2">Verification shares only:</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <span className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-gray-300">Name</span>
+                    <span className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-gray-300">Role</span>
+                    <span className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-gray-300">Card No.</span>
+                    <span className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-gray-300">Issue Date</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-3">
+                    Private details like email, mobile number, and date of birth are never shown on the public verification page.
+                  </p>
+                </div>
               </div>
-
-              <p className="text-xs text-gray-500 text-center max-w-sm">
-                Anyone can scan the QR code to confirm this ID is real — it only reveals your name, role, and issue
-                date, never your email, mobile, or date of birth.
-              </p>
-            </>
+            </div>
           )}
         </div>
       </main>
