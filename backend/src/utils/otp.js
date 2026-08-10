@@ -63,9 +63,14 @@ async function sendViaMsg91(target, code) {
     headers: { "Content-Type": "application/json" },
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok || data?.type === "error") {
+  if (!response.ok || data?.type === "error" || (data?.type && data.type !== "success")) {
     throw new Error(data?.message || "MSG91 failed to send OTP SMS.");
   }
+  logger.info("MSG91 OTP SMS accepted", {
+    target: mobile.replace(/^(\d{2})\d+(\d{2})$/, "$1******$2"),
+    providerMessage: data?.message,
+    providerType: data?.type,
+  });
 }
 
 // Twilio Messages API — plain SMS send (not Twilio Verify, since we
