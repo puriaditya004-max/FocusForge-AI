@@ -86,6 +86,8 @@ function formatSubscription(subscription) {
       trialEndsAt: null,
       currentPeriodEnd: null,
       graceEndsAt: null,
+      source: "NONE",
+      owner: null,
     };
   }
 
@@ -100,7 +102,54 @@ function formatSubscription(subscription) {
     graceEndsAt: subscription.graceEndsAt,
     accessEndsAt: subscription.currentPeriodEnd || subscription.trialEndsAt,
     razorpaySubscriptionId: subscription.razorpaySubscriptionId,
+    source: subscription.source || "OWN",
+    owner: subscription.owner || null,
   };
+}
+
+async function getInheritedFamilySubscription(userId) {
+  const link = await prisma.studentParentLink.findFirst({
+    where: {
+      studentId: userId,
+      status: "APPROVED",
+      parent: {
+        subscription: {
+          plan: "FAMILY",
+          status: { in: ["ACTIVE", "TRIALING"] },
+        },
+      },
+    },
+    include: {
+      parent: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          subscription: true,
+        },
+      },
+    },
+    orderBy: { connectedAt: "asc" },
+  });
+
+  if (!link?.parent?.subscription) return null;
+  return {
+    ...link.parent.subscription,
+    source: "FAMILY_PARENT",
+    owner: {
+      id: link.parent.id,
+      name: link.parent.name,
+      email: link.parent.email,
+    },
+  };
+}
+
+async function getEffectiveSubscriptionForUser(userId) {
+  const ownSubscription = await prisma.subscription.findUnique({ where: { userId } });
+  if (["ACTIVE", "TRIALING", "GRACE"].includes(effectiveStatus(ownSubscription))) {
+    return ownSubscription;
+  }
+  return (await getInheritedFamilySubscription(userId)) || ownSubscription;
 }
 
 async function ensureSubscription(userId) {
@@ -184,7 +233,7 @@ async function activateSubscriptionForPayment(payment, paymentId, signature) {
 async function getMySubscription(req, res) {
   try {
     const userId = req.user.userId;
-    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    const subscription = await getEffectiveSubscriptionForUser(userId);
     return res.json({ subscription: formatSubscription(subscription), plans: PLAN_CONFIG });
   } catch (err) {
     logger.error("getMySubscription error:", err);
@@ -213,6 +262,9 @@ async function createSubscriptionOrder(req, res) {
     const userId = req.user.userId;
     const plan = normalizePlan(req.body.plan);
     if (!plan) return res.status(400).json({ error: "Choose a valid subscription plan." });
+    if (req.user.role === "PARENT" && plan !== "FAMILY") {
+      return res.status(403).json({ error: "Parent accounts can activate the Family Plan only." });
+    }
 
     const subscription = await ensureSubscription(userId);
     const planConfig = PLAN_CONFIG[plan];
@@ -298,6 +350,7 @@ async function processSubscriptionWebhookOrder({ orderId, paymentId }) {
 module.exports = {
   PLAN_CONFIG,
   formatSubscription,
+  getEffectiveSubscriptionForUser,
   getMySubscription,
   startTrial,
   createSubscriptionOrder,
