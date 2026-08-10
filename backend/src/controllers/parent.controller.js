@@ -12,6 +12,7 @@
 
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const { formatSubscription } = require("./subscription.controller");
 
 async function getStudentSnapshot(studentId) {
   const startOfDay = new Date();
@@ -100,7 +101,7 @@ async function getOverview(req, res) {
 
     // Only APPROVED links can expose a student's data to a parent.
     // Pending/rejected requests must never show up here.
-    const [links, pendingLinks] = await Promise.all([
+    const [links, pendingLinks, subscription] = await Promise.all([
       prisma.studentParentLink.findMany({
         where: { parentId, status: "APPROVED" },
       }),
@@ -109,6 +110,7 @@ async function getOverview(req, res) {
         include: { student: { select: { id: true, name: true, email: true } } },
         orderBy: { connectedAt: "desc" },
       }),
+      prisma.subscription.findUnique({ where: { userId: parentId } }),
     ]);
 
     const children = await Promise.all(
@@ -118,6 +120,12 @@ async function getOverview(req, res) {
     return res.json({
       children: children.filter(Boolean),
       linked: links.length > 0,
+      subscription: formatSubscription(subscription),
+      familySeats: {
+        used: links.length,
+        limit: 3,
+        available: Math.max(0, 3 - links.length),
+      },
       pendingRequests: pendingLinks.map((link) => ({
         id: link.id,
         studentId: link.student.id,
@@ -154,6 +162,14 @@ async function linkStudent(req, res) {
 
     if (!student || student.role !== "STUDENT") {
       return res.status(404).json({ error: "No student account found with that email." });
+    }
+
+    const [approvedCount, pendingCount] = await Promise.all([
+      prisma.studentParentLink.count({ where: { parentId, status: "APPROVED" } }),
+      prisma.studentParentLink.count({ where: { parentId, status: "PENDING" } }),
+    ]);
+    if (approvedCount + pendingCount >= 3) {
+      return res.status(409).json({ error: "Family Plan supports up to 3 linked student profiles." });
     }
 
     const existingLink = await prisma.studentParentLink.findUnique({
