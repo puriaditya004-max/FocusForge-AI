@@ -324,6 +324,25 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleSubscriptionAction(subscriptionId, action, days) {
+    setActingId(subscriptionId);
+    try {
+      const res = await fetch(`${API_BASE}/admin/subscriptions/${subscriptionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action, days }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update subscription.");
+      fetchOverview();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActingId(null);
+    }
+  }
+
   const statusFilterOptions = ["PENDING", "APPROVED", "REJECTED", "ALL"];
   const refundFilterOptions = ["REQUESTED", "PROCESSED", "REJECTED", "ALL"];
 
@@ -440,6 +459,12 @@ export default function AdminDashboard() {
                   label="Trial Users"
                   value={overview?.subscriptions?.byStatus?.TRIALING ?? 0}
                   tone="text-purple-300"
+                />
+                <StatCard
+                  icon={Clock3}
+                  label="Grace Subs"
+                  value={overview?.subscriptions?.inGrace ?? 0}
+                  tone="text-yellow-300"
                 />
                 <StatCard
                   icon={Crown}
@@ -559,7 +584,7 @@ export default function AdminDashboard() {
                       <p className="text-sm text-gray-500 p-4">No subscriptions yet.</p>
                     ) : (
                       overview.recentSubscriptions.map((s) => (
-                        <div key={s.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                        <div key={s.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-gray-100 truncate">{s.userName}</p>
                             <p className="text-xs text-gray-500 truncate">{s.userEmail} · {s.userRole}</p>
@@ -567,7 +592,32 @@ export default function AdminDashboard() {
                               {s.plan} · ends {formatDateTime(s.accessEndsAt)}
                             </p>
                           </div>
-                          <StatusPill value={s.status} />
+                          <div className="flex flex-wrap sm:justify-end items-center gap-2 flex-shrink-0">
+                            <StatusPill value={s.status} />
+                            <button
+                              onClick={() => handleSubscriptionAction(s.id, "EXTEND", 7)}
+                              disabled={actingId === s.id}
+                              className="text-[10px] px-2 py-1 rounded-lg border border-green-500/20 text-green-300 hover:bg-green-500/10 disabled:opacity-50"
+                            >
+                              +7d
+                            </button>
+                            <button
+                              onClick={() => handleSubscriptionAction(s.id, "EXTEND", 30)}
+                              disabled={actingId === s.id}
+                              className="text-[10px] px-2 py-1 rounded-lg border border-purple-500/20 text-purple-300 hover:bg-purple-500/10 disabled:opacity-50"
+                            >
+                              +30d
+                            </button>
+                            {s.status !== "CANCELLED" && (
+                              <button
+                                onClick={() => handleSubscriptionAction(s.id, "CANCEL")}
+                                disabled={actingId === s.id}
+                                className="text-[10px] px-2 py-1 rounded-lg border border-red-500/20 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))
                     )}
