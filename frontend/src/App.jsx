@@ -98,7 +98,7 @@ export default function App() {
           <Route
             path="/subscription"
             element={
-              <ProtectedRoute allowedRoles={["STUDENT"]}>
+              <ProtectedRoute allowedRoles={["STUDENT", "PARENT"]}>
                 <Subscription />
               </ProtectedRoute>
             }
