@@ -1,6 +1,12 @@
 const crypto = require("crypto");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
+const {
+  addDays,
+  getAccessEndsAt,
+  getEffectiveSubscriptionStatus,
+  refreshSubscriptionLifecycle,
+} = require("../utils/subscriptionLifecycle");
 
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
 const TRIAL_DAYS = Number(process.env.SUBSCRIPTION_TRIAL_DAYS || 30);
@@ -23,12 +29,6 @@ const PLAN_CONFIG = {
     durationDays: 30,
   },
 };
-
-function addDays(date, days) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
 
 function getRazorpayConfig() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -80,19 +80,6 @@ function assertPaymentMatchesPlan(payment) {
   return planConfig;
 }
 
-function effectiveStatus(subscription) {
-  if (!subscription) return "NONE";
-  if (subscription.status === "CANCELLED") return "CANCELLED";
-
-  const now = new Date();
-  const accessEndsAt = subscription.currentPeriodEnd || subscription.trialEndsAt;
-  if (accessEndsAt && accessEndsAt < now) {
-    if (subscription.graceEndsAt && subscription.graceEndsAt >= now) return "GRACE";
-    return "EXPIRED";
-  }
-  return subscription.status;
-}
-
 function formatSubscription(subscription) {
   if (!subscription) {
     return {
@@ -111,13 +98,13 @@ function formatSubscription(subscription) {
   return {
     id: subscription.id,
     plan: subscription.plan,
-    status: effectiveStatus(subscription),
+    status: getEffectiveSubscriptionStatus(subscription),
     storedStatus: subscription.status,
     trialAvailable: false,
     trialEndsAt: subscription.trialEndsAt,
     currentPeriodEnd: subscription.currentPeriodEnd,
     graceEndsAt: subscription.graceEndsAt,
-    accessEndsAt: subscription.currentPeriodEnd || subscription.trialEndsAt,
+    accessEndsAt: getAccessEndsAt(subscription),
     razorpaySubscriptionId: subscription.razorpaySubscriptionId,
     source: subscription.source || "OWN",
     owner: subscription.owner || null,
@@ -149,9 +136,10 @@ async function getInheritedFamilySubscription(userId) {
     orderBy: { connectedAt: "asc" },
   });
 
-  if (!link?.parent?.subscription) return null;
+  const parentSubscription = await refreshSubscriptionLifecycle(prisma, link?.parent?.subscription);
+  if (!parentSubscription) return null;
   return {
-    ...link.parent.subscription,
+    ...parentSubscription,
     source: "FAMILY_PARENT",
     owner: {
       id: link.parent.id,
@@ -162,8 +150,11 @@ async function getInheritedFamilySubscription(userId) {
 }
 
 async function getEffectiveSubscriptionForUser(userId) {
-  const ownSubscription = await prisma.subscription.findUnique({ where: { userId } });
-  if (["ACTIVE", "TRIALING", "GRACE"].includes(effectiveStatus(ownSubscription))) {
+  const ownSubscription = await refreshSubscriptionLifecycle(
+    prisma,
+    await prisma.subscription.findUnique({ where: { userId } })
+  );
+  if (["ACTIVE", "TRIALING", "GRACE"].includes(getEffectiveSubscriptionStatus(ownSubscription))) {
     return ownSubscription;
   }
   return (await getInheritedFamilySubscription(userId)) || ownSubscription;
@@ -388,6 +379,32 @@ async function markSubscriptionPaymentFailed(req, res) {
   }
 }
 
+async function cancelMySubscription(req, res) {
+  try {
+    const userId = req.user.userId;
+    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    if (!subscription) return res.status(404).json({ error: "Subscription not found." });
+    if (subscription.status === "CANCELLED") {
+      return res.json({ message: "Subscription already cancelled.", subscription: formatSubscription(subscription) });
+    }
+
+    const now = new Date();
+    const cancelledSubscription = await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: "CANCELLED",
+        currentPeriodEnd: now,
+        graceEndsAt: now,
+      },
+    });
+
+    return res.json({ message: "Subscription cancelled.", subscription: formatSubscription(cancelledSubscription) });
+  } catch (err) {
+    logger.error("cancelMySubscription error:", err);
+    return res.status(500).json({ error: "Failed to cancel subscription." });
+  }
+}
+
 async function processSubscriptionWebhookOrder({ orderId, paymentId }) {
   if (!orderId) return false;
   const payment = await prisma.subscriptionPayment.findUnique({ where: { razorpayOrderId: orderId } });
@@ -413,6 +430,7 @@ module.exports = {
   createSubscriptionOrder,
   verifySubscriptionPayment,
   markSubscriptionPaymentFailed,
+  cancelMySubscription,
   processSubscriptionWebhookOrder,
   processSubscriptionWebhookFailure,
 };
