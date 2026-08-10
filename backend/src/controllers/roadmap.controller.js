@@ -156,6 +156,32 @@ function safeParsePlanJson(raw) {
   }
 }
 
+async function saveParsedRoadmap(userId, parsed) {
+  const topic = String(parsed.topic || "Imported Plan").slice(0, 100);
+  const weeks = parsed.weeks.slice(0, MAX_WEEKS);
+
+  await prisma.roadmapItem.deleteMany({ where: { userId } });
+  await prisma.roadmapItem.createMany({
+    data: weeks.map((w, idx) => ({
+      userId,
+      weekNumber: idx + 1,
+      monthNumber: Number(w.monthNumber) || Math.floor(idx / 4) + 1,
+      monthLabel: String(w.monthLabel || `${topic} - Month ${Math.floor(idx / 4) + 1}`).slice(0, 200),
+      title: String(w.title || "Study session").slice(0, 300),
+      tools: w.tools ? String(w.tools).slice(0, 200) : null,
+      hours: w.hours ? String(w.hours).slice(0, 50) : "As per timetable",
+      project: w.goal ? String(w.goal).slice(0, 200) : null,
+    })),
+  });
+
+  const items = await prisma.roadmapItem.findMany({
+    where: { userId },
+    orderBy: { weekNumber: "asc" },
+  });
+
+  return { topic, weeks: items.map(formatItem) };
+}
+
 async function generateRoadmap(req, res) {
   try {
     const userId = req.user.userId;
@@ -201,33 +227,83 @@ Respond with ONLY this exact JSON shape, nothing else, no markdown fences, no co
     const topic = String(parsed.topic || "Your Plan").slice(0, 100);
     const weeks = parsed.weeks.slice(0, MAX_WEEKS);
 
-    // Regenerating REPLACES the student's current plan
-    await prisma.roadmapItem.deleteMany({ where: { userId } });
-    await prisma.roadmapItem.createMany({
-      data: weeks.map((w, idx) => ({
-        userId,
-        weekNumber: idx + 1,
-        monthNumber: Number(w.monthNumber) || 1,
-        monthLabel: String(w.monthLabel || topic).slice(0, 200),
-        title: String(w.title || "Study session").slice(0, 300),
-        tools: w.tools ? String(w.tools).slice(0, 200) : null,
-        hours: w.hours ? String(w.hours).slice(0, 50) : "6-8 Hrs",
-        project: w.goal ? String(w.goal).slice(0, 200) : null,
-      })),
-    });
-
-    const items = await prisma.roadmapItem.findMany({
-      where: { userId },
-      orderBy: { weekNumber: "asc" },
-    });
-
-    return res.status(201).json({
-      topic,
-      weeks: items.map(formatItem),
-    });
+    return res.status(201).json(await saveParsedRoadmap(userId, { topic, weeks }));
   } catch (err) {
     logger.error("generateRoadmap error:", err);
     return res.status(500).json({ error: "Could not generate your plan right now — please try again." });
+  }
+}
+
+async function importRoadmap(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { fileName, mimeType, dataBase64 } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: "GEMINI_API_KEY missing in .env" });
+    }
+
+    const systemPrompt = `You extract student timetables for FocusForge AI.
+Read the uploaded timetable image/PDF and convert it into a clean week-by-week Smart Timetable.
+
+Rules:
+- Preserve real subjects/topics from the file. Do not invent unrelated topics.
+- If the file is a daily/weekly school timetable, convert each meaningful study block into ordered weekly study items.
+- If dates are unclear, group items into logical weeks and months.
+- If handwriting or layout is unclear, still return your best structured extraction with concise titles.
+- Never return more than ${MAX_WEEKS} weeks.
+
+Respond with ONLY this exact JSON shape, no markdown:
+{"topic":"<short plan name from file>","weeks":[{"week":1,"monthNumber":1,"monthLabel":"<Plan> - Month 1: <phase>","title":"<specific topic/subject>","tools":"<source/context, e.g. Imported timetable>","hours":"<time or duration if visible>","goal":"<short milestone or schedule note>"}]}`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: `Extract this timetable into FocusForge Smart Timetable JSON. File name: ${fileName}` },
+              { inline_data: { mime_type: mimeType, data: dataBase64 } },
+            ],
+          },
+        ],
+      }),
+    });
+
+    recordGeminiCall();
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini import error (${response.status}): ${errText}`);
+    }
+
+    const data = await response.json();
+    const rawReply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawReply) {
+      return res.status(502).json({ error: "Forge AI could not read this timetable. Try a clearer PDF or photo." });
+    }
+
+    const parsed = safeParsePlanJson(rawReply);
+    if (!parsed || parsed.weeks.length === 0) {
+      return res.status(502).json({ error: "Forge AI could not extract a valid timetable from this file." });
+    }
+
+    const combinedText = parsed.weeks
+      .map((w) => `${w.title || ""} ${w.tools || ""} ${w.goal || ""}`)
+      .join(" ");
+    if (isUnsafeAiOutput(combinedText)) {
+      logger.warn("importRoadmap: AI output flagged by safety filter", { userId });
+      return res.status(200).json({ error: SAFE_FALLBACK_REPLY });
+    }
+
+    return res.status(201).json(await saveParsedRoadmap(userId, parsed));
+  } catch (err) {
+    logger.error("importRoadmap error:", err);
+    return res.status(500).json({ error: "Could not import this timetable right now." });
   }
 }
 
@@ -288,5 +364,6 @@ module.exports = {
   getRoadmap,
   updateWeekStatus,
   generateRoadmap,
+  importRoadmap,
   suggestToday,
 };
