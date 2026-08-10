@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { ChevronLeft, ChevronRight, Clock, BookOpen, Mic, Sparkles, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, BookOpen, Mic, Sparkles, Loader2, Upload } from "lucide-react";
 import { listenOnce, isVoiceInputSupported } from "../utils/voice";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -14,6 +14,8 @@ const MONTH_PALETTE = [
   "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
   "bg-pink-500/20 text-pink-300 border-pink-500/30",
 ];
+
+const IMPORT_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
 
 function monthColorFor(monthNumber) {
   const idx = ((Number(monthNumber) || 1) - 1) % MONTH_PALETTE.length;
@@ -29,6 +31,18 @@ function deriveTopicHeading(plan) {
   return idx > -1 ? label.slice(0, idx).trim() : label;
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(new Error("Could not read this file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Timetable() {
   const [currentWeek, setCurrentWeek] = useState(1);
   const [weeklyPlan, setWeeklyPlan] = useState([]);
@@ -39,6 +53,8 @@ export default function Timetable() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
   const voiceSupported = isVoiceInputSupported();
 
   useEffect(() => {
@@ -102,6 +118,47 @@ export default function Timetable() {
     });
   }
 
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || importing) return;
+    if (!IMPORT_MIMES.includes(file.type)) {
+      setImportError("Upload a PDF, PNG, JPG, or WEBP timetable.");
+      return;
+    }
+    if (file.size > 9 * 1024 * 1024) {
+      setImportError("Upload must be under 9MB.");
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setImportError("");
+      const dataBase64 = await fileToBase64(file);
+      const res = await fetch(`${API_BASE}/roadmap/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          dataBase64,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || data.message || "Could not import this timetable");
+      }
+      setWeeklyPlan(data.weeks || []);
+      setCurrentWeek(1);
+      setGenError("");
+    } catch (err) {
+      setImportError(err.message || "Could not import this timetable");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const currentData = weeklyPlan.find((w) => w.week === currentWeek);
   const totalWeeks = weeklyPlan.length;
   const topicHeading = deriveTopicHeading(weeklyPlan);
@@ -160,6 +217,24 @@ export default function Timetable() {
           {totalWeeks > 0 && !genError && (
             <p className="text-gray-500 text-xs mt-2">Generating a new plan replaces your current one.</p>
           )}
+          <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-medium text-gray-200">Import existing timetable</p>
+              <p className="text-gray-500 text-xs mt-1">PDF or clear photo. Importing replaces your current plan.</p>
+            </div>
+            <label className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-2.5 rounded-xl transition cursor-pointer">
+              {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              {importing ? "Importing..." : "Upload"}
+              <input
+                type="file"
+                accept=".pdf,image/png,image/jpeg,image/webp"
+                className="hidden"
+                disabled={importing || generating}
+                onChange={handleImportFile}
+              />
+            </label>
+          </div>
+          {importError && <p className="text-red-400 text-xs mt-2">{importError}</p>}
         </div>
 
         {error && (
