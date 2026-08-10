@@ -1,37 +1,10 @@
 const prisma = require("../config/db");
-
-function getAccessEndsAt(subscription) {
-  return subscription?.currentPeriodEnd || subscription?.trialEndsAt || null;
-}
-
-function getEffectiveSubscriptionStatus(subscription) {
-  if (!subscription) return "NONE";
-  if (subscription.status === "CANCELLED") return "CANCELLED";
-
-  const now = new Date();
-  const accessEndsAt = getAccessEndsAt(subscription);
-  if (accessEndsAt && accessEndsAt < now) {
-    if (subscription.graceEndsAt && subscription.graceEndsAt >= now) return "GRACE";
-    return "EXPIRED";
-  }
-
-  return subscription.status;
-}
-
-function hasPremiumAccess(subscription) {
-  return ["ACTIVE", "TRIALING", "GRACE"].includes(getEffectiveSubscriptionStatus(subscription));
-}
-
-function formatAccessPayload(subscription) {
-  return {
-    status: getEffectiveSubscriptionStatus(subscription),
-    plan: subscription?.plan || null,
-    accessEndsAt: getAccessEndsAt(subscription),
-    trialEndsAt: subscription?.trialEndsAt || null,
-    currentPeriodEnd: subscription?.currentPeriodEnd || null,
-    graceEndsAt: subscription?.graceEndsAt || null,
-  };
-}
+const {
+  getEffectiveSubscriptionStatus,
+  hasPremiumAccess,
+  formatAccessPayload,
+  refreshSubscriptionLifecycle,
+} = require("../utils/subscriptionLifecycle");
 
 async function requirePremiumAccess(req, res, next) {
   try {
@@ -44,7 +17,10 @@ async function requirePremiumAccess(req, res, next) {
       return next();
     }
 
-    const ownSubscription = await prisma.subscription.findUnique({ where: { userId } });
+    const ownSubscription = await refreshSubscriptionLifecycle(
+      prisma,
+      await prisma.subscription.findUnique({ where: { userId } })
+    );
     let subscription = ownSubscription;
 
     if (!hasPremiumAccess(subscription)) {
@@ -62,7 +38,7 @@ async function requirePremiumAccess(req, res, next) {
         include: { parent: { include: { subscription: true } } },
         orderBy: { connectedAt: "asc" },
       });
-      subscription = familyLink?.parent?.subscription || ownSubscription;
+      subscription = await refreshSubscriptionLifecycle(prisma, familyLink?.parent?.subscription) || ownSubscription;
     }
 
     if (!hasPremiumAccess(subscription)) {
