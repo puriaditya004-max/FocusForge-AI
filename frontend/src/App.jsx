@@ -9,6 +9,7 @@ import PremiumGate from "./components/PremiumGate";
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const DataDeletion = lazy(() => import("./pages/DataDeletion"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const SubscriptionPolicy = lazy(() => import("./pages/SubscriptionPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/data-deletion" element={<DataDeletion />} />
           <Route path="/refund-policy" element={<RefundPolicy />} />
           <Route path="/subscription-policy" element={<SubscriptionPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
