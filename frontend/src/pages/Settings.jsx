@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { applyTheme, normalizeTheme } from "../utils/theme";
+import { useAuth } from "../context/AuthContext";
 import {
   User,
   CalendarClock,
@@ -141,6 +143,8 @@ const TABS = [
 ];
 
 export default function Settings() {
+  const navigate = useNavigate();
+  const { deleteAccount } = useAuth();
   const [activeTab, setActiveTab] = useState("profile");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -175,6 +179,11 @@ export default function Settings() {
   const [joinedDate, setJoinedDate] = useState("");
 
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -297,6 +306,20 @@ export default function Settings() {
     link.download = "focusforge-progress.json";
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleDeleteAccount() {
+    try {
+      setDeleteError("");
+      setDeletingAccount(true);
+      await deleteAccount(deletePassword, deleteConfirmation.trim());
+      setShowDeleteAccountModal(false);
+      navigate("/signup", { replace: true });
+    } catch (err) {
+      setDeleteError(err.message || "Failed to delete account.");
+    } finally {
+      setDeletingAccount(false);
+    }
   }
 
   if (loading) {
@@ -874,6 +897,29 @@ export default function Settings() {
                         <Trash2 size={13} /> Reset
                       </button>
                     </div>
+
+                    <div className="flex items-center justify-between py-3 border-t border-red-500/10">
+                      <div>
+                        <p className="text-xs font-medium text-red-300">Delete account</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          Permanently deletes your account and personal app data
+                        </p>
+                        <p className="text-[10px] text-gray-600 mt-0.5">
+                          Payment records required for legal, refund, or dispute handling may be retained as allowed by law.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setDeletePassword("");
+                          setDeleteConfirmation("");
+                          setDeleteError("");
+                          setShowDeleteAccountModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs text-red-300"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
                   </SectionCard>
                 </>
               )}
@@ -939,6 +985,69 @@ export default function Settings() {
                 className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-xs text-white font-medium"
               >
                 Yes, reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+          <div className="bg-[#13131f] border border-red-500/20 rounded-2xl p-6 max-w-sm w-full">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                <AlertTriangle size={18} className="text-red-400" />
+              </div>
+              <button
+                onClick={() => setShowDeleteAccountModal(false)}
+                className="text-gray-500 hover:text-gray-300"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <h3 className="text-sm font-semibold text-gray-100 mb-1.5">Delete your account?</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-4">
+              This permanently removes your FocusForge account, study data, AI mentor history,
+              certificates, links, and saved settings. This action cannot be undone.
+            </p>
+
+            {deleteError && (
+              <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {deleteError}
+              </div>
+            )}
+
+            <label className="text-[11px] text-gray-500 mb-1 block">Password</label>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-red-500/50 mb-3"
+              placeholder="Enter your password"
+            />
+
+            <label className="text-[11px] text-gray-500 mb-1 block">Type DELETE to confirm</label>
+            <input
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-red-500/50 mb-5"
+              placeholder="DELETE"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={deletingAccount}
+                className="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-gray-300 border border-white/10 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount || !deletePassword || deleteConfirmation.trim() !== "DELETE"}
+                className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-50 text-xs text-white font-medium"
+              >
+                {deletingAccount ? "Deleting..." : "Delete account"}
               </button>
             </div>
           </div>
