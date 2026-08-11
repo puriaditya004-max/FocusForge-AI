@@ -70,4 +70,12 @@ const verifyOtpSchema = z.object({
   target: z.string().trim().min(3).max(120).optional(),
 });
 
-module.exports = { signupSchema, loginSchema, requestOtpSchema, verifyOtpSchema };
+const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Password is required."),
+  confirmation: z
+    .string()
+    .trim()
+    .refine((value) => value === "DELETE", 'Type "DELETE" to confirm.'),
+});
+
+module.exports = { signupSchema, loginSchema, requestOtpSchema, verifyOtpSchema, deleteAccountSchema };
