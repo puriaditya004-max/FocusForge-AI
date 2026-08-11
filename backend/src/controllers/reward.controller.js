@@ -28,6 +28,14 @@ const DAILY_CHALLENGE_TEMPLATES = [
   { title: "Study for at least 6 hours", xp: 40 },
 ];
 
+const STREAK_MILESTONES = [
+  { days: 7, label: "Week Warrior", icon: "🥉", color: "from-orange-700 to-amber-600" },
+  { days: 14, label: "Fortnight Focus", icon: "🥈", color: "from-slate-400 to-gray-300" },
+  { days: 21, label: "21 Day Legend", icon: "🥇", color: "from-yellow-500 to-amber-400" },
+  { days: 50, label: "Unstoppable", icon: "💎", color: "from-cyan-500 to-blue-400" },
+  { days: 100, label: "100 Day Master", icon: "👑", color: "from-purple-500 to-violet-400" },
+];
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -143,6 +151,49 @@ async function checkAndUnlockBadges(userId) {
   }
 }
 
+async function buildCertificateEligibility(userId) {
+  const monthItems = await prisma.roadmapItem.findMany({
+    where: { userId, monthNumber: 1 },
+    orderBy: { weekNumber: "asc" },
+  });
+
+  const completedItems = monthItems.filter((item) => item.status === "COMPLETED").length;
+  const roadmapPercent = monthItems.length
+    ? Math.round((completedItems / monthItems.length) * 100)
+    : 0;
+  const topic =
+    monthItems[0]?.monthLabel?.replace(/\s+Month\s+\d+.*/i, "").split(":")[0]?.trim() ||
+    monthItems[0]?.title ||
+    "Your Month 1 roadmap";
+
+  const certificate = await prisma.certificate.findFirst({
+    where: { userId, title: topic },
+    orderBy: { issuedAt: "desc" },
+  });
+
+  return {
+    topic,
+    roadmapPercent,
+    completedItems,
+    totalItems: monthItems.length,
+    roadmapComplete: monthItems.length > 0 && completedItems === monthItems.length,
+    projectEvidenceRequired: true,
+    passScoreRequired: 97,
+    maxAttempts: 2,
+    certificateEarned: !!certificate,
+    certificate: certificate
+      ? {
+          id: certificate.id,
+          certificateCode: certificate.certificateCode,
+          title: certificate.title,
+          score: certificate.score,
+          issuedAt: certificate.issuedAt,
+        }
+      : null,
+    eligible: monthItems.length > 0 && completedItems === monthItems.length && !certificate,
+  };
+}
+
 // GET /api/rewards
 const getRewards = async (req, res) => {
   try {
@@ -174,12 +225,19 @@ const getRewards = async (req, res) => {
     });
 
     const recentActivity = await getRecentActivity(userId, 8);
+    const certificateEligibility = await buildCertificateEligibility(userId);
+    const streakMilestones = STREAK_MILESTONES.map((milestone) => ({
+      ...milestone,
+      unlocked: user.currentStreak >= milestone.days,
+      daysRemaining: Math.max(0, milestone.days - user.currentStreak),
+    }));
 
     res.status(200).json({
       totalXP: user.xp,
       xpPerLevel: XP_PER_LEVEL,
       currentStreak: user.currentStreak,
       longestStreak: user.longestStreak,
+      streakMilestones,
       badges,
       challenges: challenges.map((c) => ({
         id: c.id,
@@ -188,6 +246,7 @@ const getRewards = async (req, res) => {
         done: c.done,
       })),
       recentActivity,
+      certificateEligibility,
     });
   } catch (err) {
     logger.error("getRewards error:", err);
