@@ -23,18 +23,40 @@ const winston = require("winston");
 const path = require("path");
 
 const isProduction = process.env.NODE_ENV === "production";
+const SECRET_KEY_PATTERN = /(secret|token|password|pass|auth|api[_-]?key|authorization|cookie|otp)/i;
+
+function redactSecrets(value, key = "") {
+  if (SECRET_KEY_PATTERN.test(key)) return "[redacted]";
+  if (!value || typeof value !== "object") return value;
+  if (value instanceof Error) return value;
+  if (Array.isArray(value)) return value.map((item) => redactSecrets(item));
+
+  return Object.fromEntries(
+    Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      redactSecrets(entryValue, entryKey),
+    ])
+  );
+}
 
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: "HH:mm:ss" }),
   winston.format.printf(({ level, message, timestamp, ...meta }) => {
-    const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : "";
+    const safeMeta = redactSecrets(meta);
+    const metaStr = Object.keys(safeMeta).length ? ` ${JSON.stringify(safeMeta)}` : "";
     return `[${timestamp}] ${level}: ${message}${metaStr}`;
   })
 );
 
 const fileFormat = winston.format.combine(
   winston.format.timestamp(),
+  winston.format((info) => {
+    Object.entries(info).forEach(([key, value]) => {
+      info[key] = redactSecrets(value, key);
+    });
+    return info;
+  })(),
   winston.format.json()
 );
 
