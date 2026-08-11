@@ -70,19 +70,19 @@ function CustomTooltip({ active, payload, label, suffix = "" }) {
 
 export default function Progress() {
   const { user } = useAuth();
-  const [range, setRange] = useState("week"); // week | month (UI toggle only, backend currently returns week)
+  const [range, setRange] = useState("week");
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [range]);
 
   async function fetchStats() {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/progress/stats`, {
+      const res = await fetch(`${API_BASE}/progress/stats?range=${range}`, {
         credentials: "include",
       });
       const data = await res.json();
@@ -129,11 +129,14 @@ export default function Progress() {
   }
 
   const {
+    studyData,
     weeklyStudyData,
     focusTrendData,
     taskCompletionData,
     subjectDistribution,
     totalHours,
+    periodGoalHours,
+    periodGoalPercent,
     weeklyGoalHours,
     weeklyGoalPercent,
     avgFocus,
@@ -144,7 +147,13 @@ export default function Progress() {
     roadmap,
   } = stats;
 
-  const goalCompletion = [{ name: "Weekly Goal", value: weeklyGoalPercent, fill: "#a855f7" }];
+  const selectedStudyData = studyData || weeklyStudyData || [];
+  const selectedGoalHours = periodGoalHours ?? weeklyGoalHours ?? 0;
+  const selectedGoalPercent = periodGoalPercent ?? weeklyGoalPercent ?? 0;
+  const rangeLabel = range === "month" ? "Last 30 days" : "Last 7 days";
+  const goalLabel = range === "month" ? "30-day goal" : "Weekly goal";
+  const roadmapTitle = roadmap?.title || "Your roadmap";
+  const goalCompletion = [{ name: goalLabel, value: selectedGoalPercent, fill: "#a855f7" }];
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -162,7 +171,9 @@ export default function Progress() {
                 Progress Overview
               </h1>
               <p className="text-sm text-gray-400">
-                Week {roadmap.currentWeek} of {roadmap.totalWeeks} — AIML + Software Engineer Roadmap
+                {roadmap.hasRoadmap
+                  ? `Week ${roadmap.currentWeek} of ${roadmap.totalWeeks} - ${roadmapTitle}`
+                  : "Generate a Smart Timetable to start tracking roadmap progress"}
               </p>
             </div>
 
@@ -189,14 +200,14 @@ export default function Progress() {
               icon={<Clock size={14} />}
               label="Total Study Time"
               value={`${totalHours}h`}
-              sub={`This week / ${weeklyGoalHours}h goal`}
+              sub={`${rangeLabel} / ${selectedGoalHours}h goal`}
               accent="text-purple-300"
             />
             <StatCard
               icon={<Target size={14} />}
               label="Avg Focus Score"
               value={`${avgFocus}%`}
-              sub="Across 7 days"
+              sub={`Across ${range === "month" ? "30 days" : "7 days"}`}
               accent="text-green-400"
             />
             <StatCard
@@ -220,10 +231,10 @@ export default function Progress() {
             <section className="lg:col-span-2 bg-[#13131f] rounded-2xl p-4 border border-white/5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-sm">Study Hours (Daily vs Goal)</h2>
-                <span className="text-xs text-gray-500">Last 7 days</span>
+                <span className="text-xs text-gray-500">{rangeLabel}</span>
               </div>
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={weeklyStudyData} margin={{ left: -16, right: 8 }}>
+                <AreaChart data={selectedStudyData} margin={{ left: -16, right: 8 }}>
                   <defs>
                     <linearGradient id="hoursFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#a855f7" stopOpacity={0.5} />
@@ -256,8 +267,8 @@ export default function Progress() {
             </section>
 
             <section className="bg-[#13131f] rounded-2xl p-4 border border-white/5 flex flex-col">
-              <h2 className="font-semibold text-sm mb-1">Weekly Goal</h2>
-              <p className="text-xs text-gray-500 mb-2">{weeklyGoalHours}h target</p>
+              <h2 className="font-semibold text-sm mb-1">{goalLabel}</h2>
+              <p className="text-xs text-gray-500 mb-2">{selectedGoalHours}h target</p>
               <ResponsiveContainer width="100%" height={220}>
                 <RadialBarChart
                   innerRadius="70%"
@@ -270,7 +281,7 @@ export default function Progress() {
                 </RadialBarChart>
               </ResponsiveContainer>
               <div className="text-center -mt-32 mb-20">
-                <p className="text-3xl font-bold text-purple-300">{weeklyGoalPercent}%</p>
+                <p className="text-3xl font-bold text-purple-300">{selectedGoalPercent}%</p>
                 <p className="text-xs text-gray-500">Completed</p>
               </div>
             </section>
@@ -394,7 +405,9 @@ export default function Progress() {
               />
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              {roadmap.percent}% of the full AIML + Software Engineer roadmap completed. Keep going! 🔥
+              {roadmap.hasRoadmap
+                ? `${roadmap.percent}% of ${roadmapTitle} completed. Keep going!`
+                : "No roadmap progress yet. Create a Smart Timetable and complete weeks to fill this bar."}
             </p>
           </section>
         </div>
