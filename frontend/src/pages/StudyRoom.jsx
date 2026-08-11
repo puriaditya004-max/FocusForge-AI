@@ -15,22 +15,10 @@ import {
   Flag,
 } from "lucide-react";
 
-// ---------------------------------------------------------
-// Study Room — real-time chat via Socket.io
-//
-// Rooms: Global (everyone lands here by default), Subject
-// rooms (Python, DSA, Web Dev, ML, General Doubts — seeded),
-// and student-created custom rooms (manual create + join,
-// no auto-join anywhere).
-//
-// REST (GET/POST /api/studyroom/...) handles room list,
-// room creation, and loading message history.
-// Socket.io (join_room / send_message / online_users /
-// new_message) handles everything live.
-// ---------------------------------------------------------
-
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const SOCKET_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace("/api", "") : "http://localhost:5000";
+const SOCKET_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace("/api", "")
+  : "http://localhost:5000";
 
 function formatTime(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();
@@ -53,15 +41,12 @@ function avatarColor(name) {
 
 export default function StudyRoom() {
   const [currentUser, setCurrentUser] = useState(null);
-
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [activeRoom, setActiveRoom] = useState(null);
-
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
-
   const [input, setInput] = useState("");
   const [chatError, setChatError] = useState(null);
   const [reportedIds, setReportedIds] = useState(new Set());
@@ -72,30 +57,27 @@ export default function StudyRoom() {
   const socketRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // ---- Load current user (for "is this my message" styling) ----
   useEffect(() => {
     fetch(`${API_BASE}/auth/me`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => setCurrentUser(data.user || data))
-      .catch((err) => console.error("Failed to load current user:", err));
+      .catch(() => setChatError("Could not load your Study Room profile."));
   }, []);
 
-  // ---- Load room list ----
   const loadRooms = useCallback(async () => {
     try {
       setRoomsLoading(true);
       const res = await fetch(`${API_BASE}/studyroom/rooms`, { credentials: "include" });
       const data = await res.json();
-      const results = data.results || []; // API responses are wrapped — known gotcha
+      const results = data.results || [];
       setRooms(results);
 
-      // Default landing: the global room
       if (!activeRoom) {
         const global = results.find((r) => r.isGlobal);
         if (global) setActiveRoom(global);
       }
     } catch (err) {
-      console.error("Failed to load rooms:", err);
+      setChatError(err.message || "Failed to load study rooms.");
     } finally {
       setRoomsLoading(false);
     }
@@ -103,24 +85,21 @@ export default function StudyRoom() {
 
   useEffect(() => {
     loadRooms();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Set up socket connection once ----
   useEffect(() => {
     const socket = io(SOCKET_URL, { withCredentials: true });
     socketRef.current = socket;
 
-    socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
-    socket.on("connect_error", (err) => console.error("❌ Socket connect_error:", err.message));
-    socket.on("disconnect", (reason) => console.log("Socket disconnected:", reason));
+    socket.on("connect", () => setChatError(null));
+    socket.on("connect_error", () => setChatError("Live chat connection failed. Refresh and try again."));
+    socket.on("disconnect", () => setChatError("Live chat disconnected. Reconnecting..."));
 
     socket.on("online_users", (list) => setOnlineUsers(list));
     socket.on("new_message", (msg) => {
       setMessages((prev) => [...prev, msg]);
     });
     socket.on("error_message", (err) => {
-      console.error("Socket error:", err);
       setChatError(err?.error || "Something went wrong.");
       setTimeout(() => setChatError(null), 4000);
     });
@@ -130,7 +109,6 @@ export default function StudyRoom() {
     };
   }, []);
 
-  // ---- Join a room whenever activeRoom changes ----
   useEffect(() => {
     if (!activeRoom || !socketRef.current) return;
 
@@ -145,11 +123,12 @@ export default function StudyRoom() {
         const data = await res.json();
         setMessages(data.results || []);
       } catch (err) {
-        console.error("Failed to load messages:", err);
+        setChatError(err.message || "Failed to load messages.");
       } finally {
         setMessagesLoading(false);
       }
     }
+
     loadMessages();
   }, [activeRoom]);
 
@@ -171,20 +150,20 @@ export default function StudyRoom() {
 
   async function reportMessage(msg) {
     if (!activeRoom || reportedIds.has(msg.id)) return;
+
     try {
-      const res = await fetch(
-        `${API_BASE}/studyroom/rooms/${activeRoom.id}/messages/${msg.id}/report`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({}),
-        }
-      );
+      const res = await fetch(`${API_BASE}/studyroom/rooms/${activeRoom.id}/messages/${msg.id}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to report message.");
       }
+
       setReportedIds((prev) => new Set(prev).add(msg.id));
     } catch (err) {
       setChatError(err.message);
@@ -195,6 +174,7 @@ export default function StudyRoom() {
   async function handleCreateRoom() {
     const trimmed = newRoomName.trim();
     if (!trimmed) return;
+
     try {
       setCreating(true);
       const res = await fetch(`${API_BASE}/studyroom/rooms`, {
@@ -203,13 +183,14 @@ export default function StudyRoom() {
         credentials: "include",
         body: JSON.stringify({ name: trimmed }),
       });
+
       const newRoom = await res.json();
       setRooms((prev) => [...prev, newRoom]);
       setActiveRoom(newRoom);
       setNewRoomName("");
       setShowCreateModal(false);
     } catch (err) {
-      console.error("Failed to create room:", err);
+      setChatError(err.message || "Failed to create room.");
     } finally {
       setCreating(false);
     }
@@ -224,7 +205,6 @@ export default function StudyRoom() {
       <Sidebar />
 
       <main className="flex-1 p-4 pt-16 md:p-6 md:pt-6 flex flex-col gap-4">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Users size={24} className="text-purple-400" /> Study Room
@@ -232,7 +212,6 @@ export default function StudyRoom() {
           <p className="text-gray-400 text-sm mt-1">Study together, grow together</p>
         </div>
 
-        {/* Mobile-only room switcher — Room List panel is hidden below lg */}
         <div className="lg:hidden">
           <select
             value={activeRoom?.id || ""}
@@ -244,7 +223,7 @@ export default function StudyRoom() {
           >
             {rooms.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.isGlobal ? "🌐 " : "# "}
+                {r.isGlobal ? "Global - " : "# "}
                 {r.name}
               </option>
             ))}
@@ -252,7 +231,6 @@ export default function StudyRoom() {
         </div>
 
         <div className="flex gap-4 flex-1 min-h-0">
-          {/* Room List Panel — hidden on small screens to keep chat usable on mobile */}
           <div className="hidden lg:flex w-56 flex-shrink-0 bg-[#1a1a2e] rounded-2xl border border-white/5 p-3 flex-col gap-4 overflow-y-auto">
             {roomsLoading ? (
               <div className="flex items-center justify-center py-8 text-gray-500 text-xs gap-2">
@@ -303,9 +281,7 @@ export default function StudyRoom() {
 
                 <div>
                   <div className="flex items-center justify-between px-1 mb-1.5">
-                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">
-                      My Rooms
-                    </p>
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">My Rooms</p>
                     <button
                       onClick={() => setShowCreateModal(true)}
                       className="text-gray-500 hover:text-purple-300"
@@ -314,12 +290,12 @@ export default function StudyRoom() {
                       <Plus size={14} />
                     </button>
                   </div>
+
                   <div className="space-y-1">
                     {customRooms.length === 0 && (
-                      <p className="text-[10px] text-gray-600 px-1">
-                        No rooms yet — create one!
-                      </p>
+                      <p className="text-[10px] text-gray-600 px-1">No rooms yet - create one!</p>
                     )}
+
                     {customRooms.map((room) => (
                       <button
                         key={room.id}
@@ -340,7 +316,6 @@ export default function StudyRoom() {
             )}
           </div>
 
-          {/* Chat Panel */}
           <div className="flex-1 bg-[#1a1a2e] rounded-2xl border border-white/5 flex flex-col min-w-0">
             <div className="p-4 border-b border-white/5 flex items-center gap-2">
               <MessageSquare size={18} className="text-purple-400" />
@@ -358,12 +333,11 @@ export default function StudyRoom() {
                   <Loader2 size={14} className="animate-spin" /> Loading messages...
                 </div>
               ) : messages.length === 0 ? (
-                <p className="text-center text-gray-600 text-xs py-8">
-                  No messages yet — say hi 👋
-                </p>
+                <p className="text-center text-gray-600 text-xs py-8">No messages yet - say hi</p>
               ) : (
                 messages.map((msg) => {
                   const isMe = msg.userId === currentUser?.id;
+
                   return (
                     <div key={msg.id} className={`flex gap-3 group ${isMe ? "flex-row-reverse" : ""}`}>
                       <div
@@ -373,11 +347,13 @@ export default function StudyRoom() {
                       >
                         {msg.userName?.charAt(0).toUpperCase()}
                       </div>
+
                       <div className={`max-w-xs flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs text-gray-500">{isMe ? "" : msg.userName}</span>
                           <span className="text-xs text-gray-600">{formatTime(msg.time)}</span>
                         </div>
+
                         <div className={`flex items-center gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
                           <div
                             className={`px-4 py-2 rounded-2xl text-sm ${
@@ -388,6 +364,7 @@ export default function StudyRoom() {
                           >
                             {msg.message}
                           </div>
+
                           {!isMe && (
                             <button
                               onClick={() => reportMessage(msg)}
@@ -414,6 +391,7 @@ export default function StudyRoom() {
                   {chatError}
                 </p>
               )}
+
               <div className="flex gap-3">
                 <input
                   className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-sm outline-none focus:border-purple-500 placeholder-gray-500"
@@ -434,16 +412,15 @@ export default function StudyRoom() {
             </div>
           </div>
 
-          {/* Members Panel — hidden below lg, same reasoning as Room List */}
           <div className="hidden lg:block w-64 flex-shrink-0 space-y-3">
             <div className="bg-[#1a1a2e] rounded-2xl p-4 border border-white/5">
               <h2 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
                 <Users size={15} className="text-purple-400" /> Online ({onlineUsers.length})
               </h2>
+
               <div className="space-y-3">
-                {onlineUsers.length === 0 && (
-                  <p className="text-xs text-gray-600">No one else here yet</p>
-                )}
+                {onlineUsers.length === 0 && <p className="text-xs text-gray-600">No one else here yet</p>}
+
                 {onlineUsers.map((u) => (
                   <div key={u.userId} className="flex items-center gap-3">
                     <div className="relative">
@@ -456,6 +433,7 @@ export default function StudyRoom() {
                       </div>
                       <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#1a1a2e] bg-green-400" />
                     </div>
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className="text-white text-sm font-medium truncate">{u.name}</span>
@@ -473,19 +451,16 @@ export default function StudyRoom() {
         </div>
       </main>
 
-      {/* Create Room Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
           <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-6 max-w-sm w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-100">Create a new room</h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-500 hover:text-gray-300"
-              >
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-gray-300">
                 <X size={16} />
               </button>
             </div>
+
             <input
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
@@ -494,6 +469,7 @@ export default function StudyRoom() {
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-purple-500/50 mb-4"
               autoFocus
             />
+
             <button
               onClick={handleCreateRoom}
               disabled={creating || !newRoomName.trim()}
