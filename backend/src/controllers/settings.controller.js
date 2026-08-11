@@ -82,6 +82,89 @@ const formatUser = (user) => ({
   razorpayRouteAccountId: user.razorpayRouteAccountId,
 });
 
+function formatDate(date) {
+  if (!date) return "";
+  return new Date(date).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+async function buildSettingsResponse(user) {
+  const [certificates, enrollments, activityLogs] = await Promise.all([
+    prisma.certificate.findMany({
+      where: { userId: user.id },
+      orderBy: { issuedAt: "desc" },
+      take: 5,
+    }),
+    prisma.enrollment.findMany({
+      where: { studentId: user.id },
+      include: { course: { include: { teacher: { select: { name: true } } } } },
+      orderBy: { enrolledAt: "desc" },
+      take: 5,
+    }),
+    prisma.activityLog.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    }),
+  ]);
+
+  const formattedCertificates = certificates.map((cert) => ({
+    id: cert.certificateCode,
+    title: cert.title,
+    score: cert.score,
+    date: formatDate(cert.issuedAt),
+  }));
+
+  const formattedCourses = enrollments.map((enrollment) => ({
+    id: enrollment.id,
+    name: enrollment.course.title,
+    teacherName: enrollment.course.teacher.name,
+    progress: enrollment.progress,
+    status: enrollment.status,
+    enrolledAt: formatDate(enrollment.enrolledAt),
+  }));
+
+  const journeyMilestones = [
+    {
+      label: "Joined FocusForge AI",
+      date: formatDate(user.createdAt),
+      done: true,
+    },
+    ...(user.currentStreak > 0
+      ? [{
+          label: `Built a ${user.currentStreak}-day study streak`,
+          date: "Current",
+          done: true,
+        }]
+      : []),
+    ...formattedCertificates.slice(0, 1).map((cert) => ({
+      label: `Earned certificate: ${cert.title}`,
+      date: cert.date,
+      done: true,
+    })),
+    ...formattedCourses.slice(0, 1).map((course) => ({
+      label: `Enrolled in ${course.name}`,
+      date: course.enrolledAt,
+      done: true,
+    })),
+    ...activityLogs.map((log) => ({
+      label: log.text,
+      date: formatDate(log.createdAt),
+      done: true,
+    })),
+  ];
+
+  return {
+    ...formatUser(user),
+    certificatesEarned: formattedCertificates,
+    coursesInProgress: formattedCourses,
+    journeyMilestones,
+  };
+}
+
 // GET /api/settings
 const getSettings = async (req, res) => {
   try {
@@ -90,7 +173,7 @@ const getSettings = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    res.status(200).json(formatUser(user));
+    res.status(200).json(await buildSettingsResponse(user));
   } catch (err) {
     logger.error("getSettings error:", err);
     res.status(500).json({ message: "Failed to fetch settings" });
@@ -144,7 +227,7 @@ const updateSettings = async (req, res) => {
     }
 
     const updated = await prisma.user.update({ where: { id: userId }, data });
-    res.status(200).json(formatUser(updated));
+    res.status(200).json(await buildSettingsResponse(updated));
   } catch (err) {
     logger.error("updateSettings error:", err);
     res.status(500).json({ message: "Failed to update settings" });
