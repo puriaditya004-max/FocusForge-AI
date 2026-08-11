@@ -10,6 +10,9 @@ jobs:
   backend:
     name: Backend tests and Prisma validate
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/focusforge
+      JWT_SECRET: test-only-secret-do-not-use-in-prod
     defaults:
       run:
         working-directory: backend
@@ -28,10 +31,11 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Validate Prisma schema
         run: npx prisma validate
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/focusforge
 
       - name: Run backend tests
         run: npm test
