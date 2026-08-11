@@ -123,16 +123,18 @@ export default function YoutubeSuggestions() {
     setPlayingVideo(video);
   }
 
-  async function runLiveSearch() {
-    if (!query.trim()) return;
+  async function runLiveSearch(searchTerm = query) {
+    const trimmedQuery = searchTerm.trim();
+    if (!trimmedQuery) return;
 
+    setQuery(trimmedQuery);
     setLiveLoading(true);
     setLiveError("");
     setHasSearched(true);
 
     try {
       const res = await fetch(
-        `${API_BASE}/youtube/search?q=${encodeURIComponent(query.trim())}`,
+        `${API_BASE}/youtube/search?q=${encodeURIComponent(trimmedQuery)}`,
         { credentials: "include" }
       );
       const data = await res.json();
@@ -162,6 +164,8 @@ export default function YoutubeSuggestions() {
     recommendationContext?.roadmapFocus?.title ||
     null;
 
+  const suggestedQueries = recommendationContext?.suggestedQueries || [];
+
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
       <Sidebar />
@@ -177,36 +181,73 @@ export default function YoutubeSuggestions() {
                 YouTube Suggestions
               </h1>
               <p className="text-sm text-gray-400">
-                Videos matched to your current roadmap topics, or search YouTube directly.
+                Videos matched to your roadmap and today's plan, with live YouTube search.
               </p>
             </div>
 
-            <div className="relative w-full sm:w-80">
+            <div className="relative w-full sm:w-96">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="Search YouTube..."
-                className="w-full bg-[#13131f] border border-white/10 rounded-xl pl-9 pr-16 py-2 text-sm outline-none focus:border-purple-500 placeholder-gray-500"
+                placeholder="Search videos or channels..."
+                className="w-full bg-[#13131f] border border-white/10 rounded-xl pl-9 pr-24 py-2 text-sm outline-none focus:border-purple-500 placeholder-gray-500"
               />
               {query && (
                 <button
                   onClick={clearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-16 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
                   title="Clear search"
                 >
                   <X size={14} />
                 </button>
               )}
+              <button
+                onClick={() => runLiveSearch()}
+                disabled={!query.trim() || liveLoading}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Search
+              </button>
             </div>
           </div>
 
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">
-              {error}
+          {error && <Alert tone="danger">{error}</Alert>}
+
+          {recommendationContext && (
+            <div className="bg-purple-700/10 border border-purple-500/20 rounded-2xl px-4 py-3 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <Sparkles size={18} className="text-purple-300 flex-shrink-0" />
+                <p className="text-sm text-gray-300">
+                  {roadmapTitle ? (
+                    <>
+                      Suggestions tailored to:{" "}
+                      <span className="text-purple-300 font-medium">{roadmapTitle}</span>
+                    </>
+                  ) : (
+                    "Create a Smart Timetable or Today's Plan task to get tailored videos."
+                  )}
+                </p>
+              </div>
+
+              {suggestedQueries.length > 0 && (
+                <div className="flex flex-wrap gap-2 pl-0 sm:pl-8">
+                  {suggestedQueries.slice(0, 5).map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => runLiveSearch(suggestion)}
+                      className="rounded-full border border-purple-400/25 bg-purple-500/10 px-3 py-1 text-xs text-purple-100 hover:border-purple-300/50 hover:bg-purple-500/20"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          {recommendationError && <Alert tone="danger">{recommendationError}</Alert>}
 
           {hasSearched && (
             <VideoSection
@@ -217,30 +258,8 @@ export default function YoutubeSuggestions() {
               saved={saved}
               onWatch={handleWatch}
               onSave={toggleSave}
-              emptyText="No live results found. Try a different search term."
+              emptyText="No live results found. Try a suggested topic or a different search term."
             />
-          )}
-
-          {recommendationContext && (
-            <div className="bg-purple-700/10 border border-purple-500/20 rounded-2xl px-4 py-3 flex items-center gap-3">
-              <Sparkles size={18} className="text-purple-300 flex-shrink-0" />
-              <p className="text-sm text-gray-300">
-                {roadmapTitle ? (
-                  <>
-                    Suggestions tailored to:{" "}
-                    <span className="text-purple-300 font-medium">{roadmapTitle}</span>
-                  </>
-                ) : (
-                  "Create a Smart Timetable or Today's Plan task to get tailored videos."
-                )}
-              </p>
-            </div>
-          )}
-
-          {recommendationError && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">
-              {recommendationError}
-            </div>
           )}
 
           <VideoSection
@@ -250,11 +269,11 @@ export default function YoutubeSuggestions() {
             saved={saved}
             onWatch={handleWatch}
             onSave={toggleSave}
-            emptyText="No recommendations yet. Create a Smart Timetable or search YouTube directly above."
+            emptyText="No recommendations yet. Use a suggested topic or search YouTube directly above."
           />
 
           <p className="text-xs text-gray-600 text-center mt-2">
-            Showing {filteredVideos.length} roadmap-matched videos. Press Enter for live YouTube search.
+            Showing {filteredVideos.length} roadmap-matched videos. Suggested topics use your latest roadmap and plan context.
           </p>
         </div>
       </main>
@@ -295,6 +314,19 @@ export default function YoutubeSuggestions() {
   );
 }
 
+function Alert({ children, tone = "info" }) {
+  const classes =
+    tone === "danger"
+      ? "bg-red-500/10 border-red-500/30 text-red-300"
+      : "bg-purple-500/10 border-purple-500/30 text-purple-200";
+
+  return (
+    <div className={`border text-sm rounded-xl px-4 py-3 ${classes}`}>
+      {children}
+    </div>
+  );
+}
+
 function VideoSection({ title, videos, loading, error, saved, onWatch, onSave, emptyText }) {
   return (
     <div className="flex flex-col gap-3">
@@ -304,11 +336,7 @@ function VideoSection({ title, videos, loading, error, saved, onWatch, onSave, e
         {loading && <Loader2 size={14} className="animate-spin text-gray-500" />}
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">
-          {error}
-        </div>
-      )}
+      {error && <Alert tone="danger">{error}</Alert>}
 
       {loading ? (
         <div className="bg-[#13131f] rounded-2xl border border-white/5 p-10 text-center text-gray-500 text-sm flex items-center justify-center gap-2">
@@ -338,7 +366,10 @@ function VideoSection({ title, videos, loading, error, saved, onWatch, onSave, e
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-red-600 to-rose-900" />
                 )}
-                <PlayCircle size={42} className="absolute text-white/90 group-hover:scale-110 transition drop-shadow-lg" />
+                <PlayCircle
+                  size={42}
+                  className="absolute text-white/90 group-hover:scale-110 transition drop-shadow-lg"
+                />
               </button>
 
               <div className="p-4 flex flex-col flex-1">
