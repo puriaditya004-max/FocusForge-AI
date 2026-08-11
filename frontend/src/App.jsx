@@ -1,40 +1,49 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./context/ProtectedRoute";
 
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
-
-import Dashboard from "./pages/Dashboard";
-import Timetable from "./pages/Timetable";
-import TodaysPlan from "./pages/TodaysPlan";
-import StudyRoom from "./pages/StudyRoom";
-import FocusMode from "./pages/FocusMode";
-import Progress from "./pages/Progress";
-import AiMentor from "./pages/AiMentor";
-import YoutubeSuggestions from "./pages/YoutubeSuggestions";
-import Rewards from "./pages/Rewards";
-import CertificateExam from "./pages/CertificateExam";
-import Penalties from "./pages/Penalties";
-import Settings from "./pages/Settings";
-import ParentDashboard from "./pages/ParentDashboard";
-import TeacherDashboard from "./pages/TeacherDashboard";
-import ClassesMarketplace from "./pages/ClassesMarketplace";
-import QuizGenerator from "./pages/QuizGenerator";
-import DigitalId from "./pages/DigitalId";
-import VerifyId from "./pages/VerifyId";
-import Subscription from "./pages/Subscription";
 import HeyForgeWidget from "./components/HeyForgeWidget";
 import PremiumGate from "./components/PremiumGate";
+
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Timetable = lazy(() => import("./pages/Timetable"));
+const TodaysPlan = lazy(() => import("./pages/TodaysPlan"));
+const StudyRoom = lazy(() => import("./pages/StudyRoom"));
+const FocusMode = lazy(() => import("./pages/FocusMode"));
+const Progress = lazy(() => import("./pages/Progress"));
+const AiMentor = lazy(() => import("./pages/AiMentor"));
+const YoutubeSuggestions = lazy(() => import("./pages/YoutubeSuggestions"));
+const Rewards = lazy(() => import("./pages/Rewards"));
+const CertificateExam = lazy(() => import("./pages/CertificateExam"));
+const Penalties = lazy(() => import("./pages/Penalties"));
+const Settings = lazy(() => import("./pages/Settings"));
+const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
+const TeacherDashboard = lazy(() => import("./pages/TeacherDashboard"));
+const ClassesMarketplace = lazy(() => import("./pages/ClassesMarketplace"));
+const QuizGenerator = lazy(() => import("./pages/QuizGenerator"));
+const DigitalId = lazy(() => import("./pages/DigitalId"));
+const VerifyId = lazy(() => import("./pages/VerifyId"));
+const Subscription = lazy(() => import("./pages/Subscription"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-[#0b0b14] text-gray-300 flex items-center justify-center">
+      <div className="h-8 w-8 rounded-full border-2 border-purple-400/30 border-t-purple-400 animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
           {/* Public routes — no login required */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -203,7 +212,8 @@ export default function App() {
           {/* Root path — send logged-in users to their own home;
               ProtectedRoute+allowedRoles below bounces correctly */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
 
         {/* Global "Hey Forge" floating voice widget — renders itself
             only for logged-in STUDENT users, on every page above */}
