@@ -32,7 +32,8 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // --- Security headers (CSP, no-sniff, frameguard, etc.) ---
-app.use(helmet());
+// Public uploaded assets are intentionally loaded by Vercel/Capacitor origins.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 // Remove the "X-Powered-By: Express" header so attackers can't
 // easily fingerprint the framework/version we're running.
 app.disable("x-powered-by");
@@ -59,6 +60,12 @@ const allowedOrigins = [
   "capacitor://localhost",       // Capacitor iOS app
 ].filter(Boolean);
 
+if (process.env.NODE_ENV === "production") {
+  ["CLIENT_URL", "ADMIN_URL"].forEach((key) => {
+    if (!process.env[key]) logger.warn(`${key} is not configured; production CORS may block that app.`);
+  });
+}
+
 // --- Core middleware ---
 app.use(
   cors({
@@ -81,7 +88,14 @@ app.post("/api/payments/webhook", express.raw({ type: "application/json", limit:
 
 app.use(express.json({ limit: "10mb" })); // images/PDFs come in as base64, need a higher limit
 app.use(cookieParser());
-app.use("/uploads", express.static(UPLOAD_ROOT));
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  },
+  express.static(UPLOAD_ROOT)
+);
 
 // --- Blocks HTTP Parameter Pollution (e.g. duplicate query/body keys used to bypass checks) ---
 app.use(hpp());
