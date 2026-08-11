@@ -16,6 +16,11 @@ function toFrontendPriority(p) {
   return p.charAt(0) + p.slice(1).toLowerCase();
 }
 
+function formatScheduleTime(time, index) {
+  if (time) return time;
+  return `Task ${index + 1}`;
+}
+
 async function getDashboard(req, res) {
   try {
     const userId = req.user.userId;
@@ -73,8 +78,30 @@ async function getDashboard(req, res) {
       },
     });
 
-    // --- Current task: first incomplete task for today ---
-    const currentTaskRaw = todaysTasks.find((t) => !t.completed) || null;
+    const scheduledTasks = [...todaysTasks].sort((a, b) => {
+      const aTime = a.time || "";
+      const bTime = b.time || "";
+      const aHasTime = /^\d{1,2}:\d{2}/.test(aTime);
+      const bHasTime = /^\d{1,2}:\d{2}/.test(bTime);
+      if (aHasTime && bHasTime) return aTime.localeCompare(bTime);
+      if (aHasTime) return -1;
+      if (bHasTime) return 1;
+      return a.createdAt - b.createdAt;
+    });
+
+    // --- Current task: first incomplete scheduled task for today ---
+    const currentTaskRaw = scheduledTasks.find((t) => !t.completed) || null;
+    const currentTaskId = currentTaskRaw?.id || null;
+
+    const schedule = scheduledTasks
+      .map((task, index) => ({
+        id: task.id,
+        time: formatScheduleTime(task.time, index),
+        title: task.title,
+        subject: task.category || "General",
+        duration: task.duration || "",
+        status: task.completed ? "completed" : task.id === currentTaskId ? "current" : "upcoming",
+      }));
 
     let currentTask = null;
     if (currentTaskRaw) {
@@ -111,6 +138,7 @@ async function getDashboard(req, res) {
         focusScore: avgFocusScore,
       },
       currentTask,
+      schedule,
       user: {
         name: user?.name || "Student",
         streak: user?.currentStreak || 0,
