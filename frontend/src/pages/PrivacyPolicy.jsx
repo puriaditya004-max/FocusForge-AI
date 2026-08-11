@@ -54,9 +54,14 @@ export default function PrivacyPolicy() {
             </p>
             <p className="mb-2">
               <strong>Marketplace data:</strong> if you enroll in a teacher's course, we store the
-              enrollment record and a contact phone number so the teacher can confirm payment with
-              you directly. We do not process or store card, UPI, or bank details — FocusForge does
-              not currently use a payment gateway.
+              enrollment record, contact number, receipt details, and course access status needed
+              to manage your enrollment and resolve disputes.
+            </p>
+            <p className="mb-2">
+              <strong>Subscription and payment data:</strong> when you use paid access, we store
+              plan type, access dates, payment status, receipts, gateway order IDs, and payment IDs.
+              Card, UPI, bank, and wallet details are processed by the payment provider and are not
+              stored by FocusForge AI.
             </p>
             <p className="mb-2">
               <strong>Study Room data:</strong> messages and activity within live Study Room
@@ -82,11 +87,15 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-2">4. Third parties who process your data</h2>
             <p className="mb-2">
-              <strong>Google (Gemini API)</strong> — used by default for all students.
+              <strong>Google (Gemini API)</strong> — used by default for AI features.
             </p>
-            <p>
+            <p className="mb-2">
               <strong>Anthropic (Claude API)</strong> — used only if you've added your own API key,
               under Anthropic's own privacy terms, using your own account.
+            </p>
+            <p>
+              <strong>Razorpay and Google Play:</strong> used where applicable to process payments,
+              verify orders, and manage refunds according to the checkout method.
             </p>
           </section>
 
