@@ -89,6 +89,9 @@ Required:
 - Keep `JWT_SECRET` and `ENCRYPTION_KEY` different between staging and production.
 - Use Razorpay test keys only in staging.
 - Use a separate Sentry project for staging if staging is created.
+- The backend now fails fast in production if `DATABASE_URL` or `JWT_SECRET` is missing.
+- Important provider groups such as frontend origins, encryption, Gemini, Razorpay, SMTP, and MSG91 log clear warnings when incomplete, without printing secret values.
+- Backend logs redact secret-like keys before writing to console or log files.
 
 ## Panel Audit Notes
 
