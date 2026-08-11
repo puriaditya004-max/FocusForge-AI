@@ -1,16 +1,14 @@
 // ---------------------------------------------------------
-// youtube.routes.js — real-time YouTube search endpoint
+// youtube.routes.js - real-time YouTube search and recommendations
 // ---------------------------------------------------------
 const express = require("express");
 const router = express.Router();
 const { requireAuth } = require("../middleware/auth.middleware");
-const { searchYoutube } = require("../controllers/youtube.controller");
+const { searchYoutube, getRecommendations } = require("../controllers/youtube.controller");
 
-// Protect it just like every other feature route — only
-// logged-in students can use the search.
 router.use(requireAuth);
 
-// GET /api/youtube/search?q=...
 router.get("/search", searchYoutube);
+router.get("/recommendations", getRecommendations);
 
 module.exports = router;
