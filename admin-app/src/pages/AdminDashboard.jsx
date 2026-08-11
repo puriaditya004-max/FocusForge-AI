@@ -117,6 +117,7 @@ export default function AdminDashboard() {
   const [actingId, setActingId] = useState(null);
   const [notesDraft, setNotesDraft] = useState({});
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
 
   useEffect(() => {
     fetchOverview();
@@ -215,6 +216,8 @@ export default function AdminDashboard() {
   async function handleRevokeDigitalId(id) {
     if (!window.confirm("Revoke this Digital ID? The student will need an admin to re-issue one.")) return;
     setActingId(id);
+    setError(null);
+setSuccess(null);
     try {
       const res = await fetch(`${API_BASE}/admin/digital-ids/${id}/revoke`, {
         method: "POST",
@@ -222,6 +225,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to revoke Digital ID.");
+      setSuccess("Digital ID revoked.");
       fetchDigitalIds(digitalIdStatusFilter);
     } catch (err) {
       setError(err.message);
@@ -249,6 +253,8 @@ export default function AdminDashboard() {
 
   async function handleRetryPayout(paymentId) {
     setActingId(paymentId);
+    setError(null);
+setSuccess(null);
     try {
       const res = await fetch(`${API_BASE}/admin/payments/${paymentId}/retry-payout`, {
         method: "POST",
@@ -256,6 +262,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to retry payout.");
+      setSuccess("Payout retry started.");
       fetchPayouts(payoutStatusFilter);
     } catch (err) {
       setError(err.message);
@@ -266,6 +273,8 @@ export default function AdminDashboard() {
 
   async function handleReportAction(id, action) {
     setActingId(id);
+    setError(null);
+setSuccess(null);
     try {
       const res = await fetch(`${API_BASE}/admin/studyroom-reports/${id}/resolve`, {
         method: "POST",
@@ -275,6 +284,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to resolve report.");
+      setSuccess(action === "delete" ? "Reported message deleted." : "Report dismissed.");
       fetchReports(reportStatusFilter);
       fetchOverview();
     } catch (err) {
@@ -284,9 +294,11 @@ export default function AdminDashboard() {
     }
   }
 
-  async function handleVerificationReview(id, action) {
-    setActingId(id);
-    try {
+ async function handleVerificationReview(id, action) {
+  setActingId(id);
+  setError(null);
+  setSuccess(null);
+  try {
       const res = await fetch(`${API_BASE}/admin/teacher-verifications/${id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -295,6 +307,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to review verification.");
+      setSuccess(action === "approve" ? "Teacher verification approved." : "Teacher verification rejected.");
       fetchVerifications(verificationStatusFilter);
       fetchOverview();
     } catch (err) {
@@ -306,6 +319,8 @@ export default function AdminDashboard() {
 
   async function handleRefundAction(refundId, action) {
     setActingId(refundId);
+    setError(null);
+setSuccess(null);
     try {
       const res = await fetch(`${API_BASE}/admin/refunds/${refundId}/process`, {
         method: "POST",
@@ -315,6 +330,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to process refund.");
+      setSuccess(action === "approve" ? "Refund approved and processed." : "Refund request rejected.");
       fetchRefunds(refundStatusFilter);
       fetchOverview();
     } catch (err) {
@@ -326,6 +342,8 @@ export default function AdminDashboard() {
 
   async function handleSubscriptionAction(subscriptionId, action, days) {
     setActingId(subscriptionId);
+    setError(null);
+setSuccess(null);
     try {
       const res = await fetch(`${API_BASE}/admin/subscriptions/${subscriptionId}`, {
         method: "PATCH",
@@ -335,6 +353,7 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update subscription.");
+      setSuccess(action === "CANCEL" ? "Subscription cancelled." : `Subscription extended by ${days} days.`);
       fetchOverview();
     } catch (err) {
       setError(err.message);
@@ -372,6 +391,15 @@ export default function AdminDashboard() {
             </button>
           </div>
         )}
+
+        {success && (
+  <div className="bg-green-500/10 border border-green-500/30 text-green-300 text-sm rounded-xl p-3 mb-4 flex items-center justify-between">
+    <span>{success}</span>
+    <button onClick={() => setSuccess(null)} className="text-green-300/70 hover:text-green-200">
+      <XIcon size={14} />
+    </button>
+  </div>
+)}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-white/5">
