@@ -234,7 +234,71 @@ const updateSettings = async (req, res) => {
   }
 };
 
+// POST /api/settings/reset-progress
+// Clears study/gamification progress while preserving the account,
+// certificates, purchases, verification state, subscription, and settings.
+const resetProgress = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const tasks = await tx.task.findMany({
+        where: { userId },
+        select: { id: true },
+      });
+      const taskIds = tasks.map((task) => task.id);
+
+      const counts = {};
+      counts.subtasks = taskIds.length
+        ? (await tx.subtask.deleteMany({ where: { taskId: { in: taskIds } } })).count
+        : 0;
+      counts.tasks = (await tx.task.deleteMany({ where: { userId } })).count;
+      counts.roadmapItems = (await tx.roadmapItem.deleteMany({ where: { userId } })).count;
+      counts.focusSessions = (await tx.focusSession.deleteMany({ where: { userId } })).count;
+      counts.userBadges = (await tx.userBadge.deleteMany({ where: { userId } })).count;
+      counts.dailyChallenges = (await tx.dailyChallenge.deleteMany({ where: { userId } })).count;
+      counts.penaltyEvents = (await tx.penaltyEvent.deleteMany({ where: { userId } })).count;
+      counts.activityLogs = (await tx.activityLog.deleteMany({ where: { userId } })).count;
+      counts.quizAttempts = (await tx.quizAttempt.deleteMany({ where: { userId } })).count;
+      counts.focusSavedVideos = (await tx.savedVideo.deleteMany({ where: { userId } })).count;
+      counts.aiMentorMessages = (await tx.aiMentorMessage.deleteMany({ where: { userId } })).count;
+      counts.enrollmentsReset = (await tx.enrollment.updateMany({
+        where: { studentId: userId },
+        data: { progress: 0 },
+      })).count;
+
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: {
+          level: 1,
+          xp: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          lastActiveDate: null,
+        },
+      });
+
+      return { counts, updated };
+    });
+
+    res.status(200).json({
+      message: "Progress reset successfully",
+      resetCounts: result.counts,
+      settings: await buildSettingsResponse(result.updated),
+    });
+  } catch (err) {
+    logger.error("resetProgress error:", err);
+    res.status(500).json({ message: "Failed to reset progress" });
+  }
+};
+
 module.exports = {
   getSettings,
   updateSettings,
+  resetProgress,
 };
