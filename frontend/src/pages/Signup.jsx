@@ -221,7 +221,16 @@ export default function Signup() {
           <p className="text-[11px] text-gray-500 text-center mt-4">
             By signing up, you agree to our{" "}
             <a href="/terms" className="text-purple-400 hover:underline">Terms of Service</a> and{" "}
-            <a href="/privacy-policy" className="text-purple-400 hover:underline">Privacy Policy</a>.
+            <a href="/privacy-policy" className="text-purple-400 hover:underline">Privacy Policy</a>. Paid access is also
+            covered by our{" "}
+            <a href="/subscription-policy" className="text-purple-400 hover:underline">
+              Subscription Policy
+            </a>{" "}
+            and{" "}
+            <a href="/refund-policy" className="text-purple-400 hover:underline">
+              Refund Policy
+            </a>
+            .
           </p>
         </div>
 
