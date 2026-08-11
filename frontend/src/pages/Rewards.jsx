@@ -20,34 +20,6 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const streakMilestoneDefs = [
-  { days: 7, label: "Week Warrior", icon: "🥉", color: "from-orange-700 to-amber-600" },
-  { days: 14, label: "Fortnight Focus", icon: "🥈", color: "from-slate-400 to-gray-300" },
-  { days: 21, label: "21 Day Legend", icon: "🥇", color: "from-yellow-500 to-amber-400" },
-  { days: 50, label: "Unstoppable", icon: "💎", color: "from-cyan-500 to-blue-400" },
-  { days: 100, label: "100 Day Master", icon: "👑", color: "from-purple-500 to-violet-400" },
-];
-
-// Turns an ActivityLog row's ISO createdAt into a short relative
-// label ("2 hrs ago", "Today", "3 days ago") for display.
-function timeAgo(isoString) {
-  const then = new Date(isoString).getTime();
-  const diffMs = Date.now() - then;
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hr${hrs > 1 ? "s" : ""} ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return "Yesterday";
-  return `${days} days ago`;
-}
-
-// Still placeholder — ties into the Certificate Exam feature (not built yet)
-const monthProgress = 100;
-const projectsCompleted = 2;
-const projectsRequired = 2;
-const certificateEligible = monthProgress >= 100 && projectsCompleted >= projectsRequired;
 
 export default function Rewards() {
   const navigate = useNavigate();
@@ -138,15 +110,13 @@ export default function Rewards() {
   const currentStreak = data.currentStreak;
   const badges = data.badges;
   const challenges = data.challenges;
-
-  const streakMilestones = streakMilestoneDefs.map((m) => ({
-    ...m,
-    unlocked: currentStreak >= m.days,
-  }));
+  const streakMilestones = data.streakMilestones || [];
+  const certificate = data.certificateEligibility || {};
+  const certificateEligible = !!certificate.eligible;
 
   const unlockedBadges = badges.filter((b) => b.unlocked).length;
   const nextMilestone = streakMilestones.find((m) => !m.unlocked);
-  const daysToNextMilestone = nextMilestone ? nextMilestone.days - currentStreak : 0;
+  const daysToNextMilestone = nextMilestone ? nextMilestone.daysRemaining : 0;
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -393,34 +363,34 @@ export default function Rewards() {
                     )}
                   </h2>
                   <p className="text-xs text-gray-400 mt-1 max-w-md">
-                    Finish this month's roadmap and required projects, then clear a
-                    97%+ scoring exam to unlock an official FocusForge AI certificate.
+                    Finish your Month 1 roadmap, submit project evidence in the exam flow,
+                    then clear a {certificate.passScoreRequired || 97}%+ scoring exam to unlock
+                    an official FocusForge AI certificate.
                   </p>
 
                   <div className="flex flex-col gap-1 mt-3">
                     <div className="flex items-center gap-2 text-xs">
-                      {monthProgress >= 100 ? (
+                      {certificate.roadmapComplete ? (
                         <CheckCircle2 size={13} className="text-green-400 flex-shrink-0" />
                       ) : (
                         <div className="w-[13px] h-[13px] rounded-full border border-gray-600 flex-shrink-0" />
                       )}
-                      <span className={monthProgress >= 100 ? "text-gray-300" : "text-gray-500"}>
-                        Month roadmap completed ({monthProgress}%)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      {projectsCompleted >= projectsRequired ? (
-                        <CheckCircle2 size={13} className="text-green-400 flex-shrink-0" />
-                      ) : (
-                        <div className="w-[13px] h-[13px] rounded-full border border-gray-600 flex-shrink-0" />
-                      )}
-                      <span className={projectsCompleted >= projectsRequired ? "text-gray-300" : "text-gray-500"}>
-                        Projects completed ({projectsCompleted}/{projectsRequired})
+                      <span className={certificate.roadmapComplete ? "text-gray-300" : "text-gray-500"}>
+                        Month roadmap completed ({certificate.roadmapPercent || 0}%)
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       <div className="w-[13px] h-[13px] rounded-full border border-gray-600 flex-shrink-0" />
-                      <span className="text-gray-500">Exam score 97%+ required (max 2 attempts)</span>
+                      <span className="text-gray-500">
+                        Project evidence reviewed during certificate submission
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-[13px] h-[13px] rounded-full border border-gray-600 flex-shrink-0" />
+                      <span className="text-gray-500">
+                        Exam score {certificate.passScoreRequired || 97}%+ required
+                        (max {certificate.maxAttempts || 2} attempts)
+                      </span>
                     </div>
                   </div>
                 </div>
