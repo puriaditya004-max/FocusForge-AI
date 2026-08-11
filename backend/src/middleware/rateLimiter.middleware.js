@@ -80,6 +80,20 @@ const apiLimiter = rateLimit({
   },
 });
 
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore("payment"),
+  keyGenerator: (req) => (req.user?.userId ? `user:${req.user.userId}` : `ip:${req.ip}`),
+  handler: (req, res) => {
+    return res.status(429).json({
+      error: "Too many payment attempts. Please wait a few minutes and try again.",
+    });
+  },
+});
+
 // Must run AFTER requireAuth on the route (needs req.user.userId).
 // Falls back to IP if somehow unauthenticated, so it never throws.
 const aiKeyGenerator = (req) => (req.user?.userId ? `user:${req.user.userId}` : `ip:${req.ip}`);
@@ -113,4 +127,4 @@ const aiBurstLimiter = rateLimit({
   },
 });
 
-module.exports = { authLimiter, apiLimiter, aiDailyLimiter, aiBurstLimiter };
+module.exports = { authLimiter, apiLimiter, paymentLimiter, aiDailyLimiter, aiBurstLimiter };
