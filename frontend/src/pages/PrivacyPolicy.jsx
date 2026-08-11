@@ -117,8 +117,9 @@ export default function PrivacyPolicy() {
             <h2 className="text-lg font-semibold text-white mb-2">6. How long we keep your data</h2>
             <p>
               We keep your account and activity data for as long as your account is active. If you
-              delete your account, we delete or anonymize your personal data within [X days], except
-              where we're required to retain records for legal or dispute-resolution purposes.
+              delete your account, we delete or anonymize your personal data except where we're
+              required or allowed to retain records for legal, tax, refund, abuse-prevention, or
+              dispute-resolution purposes.
             </p>
           </section>
 
@@ -126,7 +127,11 @@ export default function PrivacyPolicy() {
             <h2 className="text-lg font-semibold text-white mb-2">7. Your rights</h2>
             <p>
               You can access and review your data via Settings, correct inaccurate data, delete your
-              saved AI Mentor API key at any time, and request account deletion by contacting us at{" "}
+              saved AI Mentor API key at any time, delete your account from Settings, or use our{" "}
+              <Link to="/data-deletion" className="text-purple-400 hover:underline">
+                Data Deletion page
+              </Link>{" "}
+              if you need help. You can also contact us at{" "}
               <a href="mailto:focusforgeai1026@gmail.com" className="text-purple-400 hover:underline">
                 focusforgeai1026@gmail.com
               </a>
