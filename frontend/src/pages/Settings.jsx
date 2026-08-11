@@ -36,9 +36,6 @@ import {
 // Profile/Timetable/Preferences/Notifications/Appearance now
 // load and save from GET/PATCH /api/settings (real backend).
 //
-// Certificates, Courses, and My Journey are still placeholder
-// — they depend on the Certificate Exam feature, not built yet.
-//
 // "Reset all progress" is still UI-only for now (no backend
 // wipe logic yet) to avoid accidental data loss during
 // development/testing.
@@ -50,27 +47,6 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const certificatesEarned = [
-  {
-    id: "CERT-PY-M1-2025",
-    title: "Python – Month 1 Foundations",
-    score: 98,
-    date: "Jan 20, 2025",
-  },
-];
-
-const coursesInProgress = [
-  { name: "DSA – Month 2", progress: 34 },
-  { name: "Machine Learning – Month 3", progress: 0 },
-];
-
-const journeyMilestones = [
-  { label: "Joined FocusForge AI", date: "Dec 2024", done: true },
-  { label: "Completed Month 1 – Python Foundations", date: "Jan 2025", done: true },
-  { label: "Earned first certificate", date: "Jan 2025", done: true },
-  { label: "Started Month 2 – DSA", date: "Jan 2025", done: true },
-  { label: "Complete Month 2", date: "Feb 2025 (est.)", done: false },
-];
 
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -177,6 +153,9 @@ export default function Settings() {
   const [level, setLevel] = useState(1);
   const [currentStreak, setCurrentStreak] = useState(0);
   const [joinedDate, setJoinedDate] = useState("");
+  const [certificatesEarned, setCertificatesEarned] = useState([]);
+  const [coursesInProgress, setCoursesInProgress] = useState([]);
+  const [journeyMilestones, setJourneyMilestones] = useState([]);
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
@@ -219,6 +198,9 @@ export default function Settings() {
       setLevel(data.level);
       setCurrentStreak(data.currentStreak);
       setJoinedDate(data.joinedDate);
+      setCertificatesEarned(data.certificatesEarned || []);
+      setCoursesInProgress(data.coursesInProgress || []);
+      setJourneyMilestones(data.journeyMilestones || []);
       setMentorApiKey(""); // never prefill — the backend only ever sends a masked value
       setMaskedApiKey(data.mentorApiKey || "");
       setApiKeySaved(Boolean(data.hasMentorApiKey));
@@ -297,6 +279,8 @@ export default function Settings() {
       profile: { name, level, currentStreak, joinedDate },
       timetable: { startTime, endTime, offDays, dailyGoal },
       certificates: certificatesEarned,
+      courses: coursesInProgress,
+      journey: journeyMilestones,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -327,7 +311,7 @@ export default function Settings() {
       <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
         <Sidebar />
         <main className="flex-1 flex flex-col">
-          <TopBar userName="Aryan" streak={0} level={1} />
+          <TopBar userName="Student" streak={0} level={1} />
           <div className="px-6 mt-6">
             <p className="text-gray-400 text-sm">Loading your settings...</p>
           </div>
@@ -434,65 +418,78 @@ export default function Settings() {
                       </div>
                     </div>
                   </SectionCard>
-
                   <SectionCard
                     icon={Award}
                     title="Certificates & Courses"
-                    subtitle="Everything you've completed so far"
+                    subtitle="Real certificates and enrollments from your account"
                   >
-                    <p className="text-[10px] text-gray-600 mb-3">
-                      (Sample data — connects to real data once Certificate Exam is built)
-                    </p>
                     <div className="mb-4">
                       <p className="text-[11px] text-gray-500 mb-2 font-medium">
                         Certificates earned ({certificatesEarned.length})
                       </p>
-                      {certificatesEarned.map((c) => (
-                        <div
-                          key={c.id}
-                          className="flex items-center gap-3 p-3 rounded-xl bg-yellow-400/5 border border-yellow-400/20 mb-2"
-                        >
-                          <div className="w-9 h-9 rounded-lg bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center flex-shrink-0">
-                            <Award size={16} className="text-yellow-400" />
+                      {certificatesEarned.length > 0 ? (
+                        certificatesEarned.map((c) => (
+                          <div
+                            key={c.id}
+                            className="flex items-center gap-3 p-3 rounded-xl bg-yellow-400/5 border border-yellow-400/20 mb-2"
+                          >
+                            <div className="w-9 h-9 rounded-lg bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center flex-shrink-0">
+                              <Award size={16} className="text-yellow-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-100 truncate">{c.title}</p>
+                              <p className="text-[10px] text-gray-500">{c.date} - {c.id}</p>
+                            </div>
+                            <span className="text-xs font-bold text-green-400 flex-shrink-0">{c.score}%</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-100 truncate">{c.title}</p>
-                            <p className="text-[10px] text-gray-500">{c.date} · {c.id}</p>
-                          </div>
-                          <span className="text-xs font-bold text-green-400 flex-shrink-0">{c.score}%</span>
+                        ))
+                      ) : (
+                        <div className="p-3 rounded-xl bg-white/3 border border-white/5">
+                          <p className="text-xs text-gray-400">No certificates earned yet.</p>
+                          <p className="text-[10px] text-gray-600 mt-0.5">Pass a certificate exam to see it here.</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                     <div>
                       <p className="text-[11px] text-gray-500 mb-2 font-medium">
                         Courses in progress ({coursesInProgress.length})
                       </p>
                       <div className="space-y-2">
-                        {coursesInProgress.map((c) => (
-                          <div key={c.name} className="p-3 rounded-xl bg-white/3 border border-white/5">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs text-gray-300 flex items-center gap-1.5">
-                                <BookOpen size={12} className="text-purple-300" /> {c.name}
-                              </span>
-                              <span className="text-[10px] text-gray-500">{c.progress}%</span>
+                        {coursesInProgress.length > 0 ? (
+                          coursesInProgress.map((c) => (
+                            <div key={c.id || c.name} className="p-3 rounded-xl bg-white/3 border border-white/5">
+                              <div className="flex items-center justify-between mb-1.5 gap-3">
+                                <span className="text-xs text-gray-300 flex items-center gap-1.5 min-w-0">
+                                  <BookOpen size={12} className="text-purple-300 flex-shrink-0" />
+                                  <span className="truncate">{c.name}</span>
+                                </span>
+                                <span className="text-[10px] text-gray-500 flex-shrink-0">{c.progress}%</span>
+                              </div>
+                              <p className="text-[10px] text-gray-600 mb-1.5">
+                                {c.status}{c.teacherName ? ` - ${c.teacherName}` : ""}
+                              </p>
+                              <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500 rounded-full"
+                                  style={{ width: `${c.progress}%` }}
+                                />
+                              </div>
                             </div>
-                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className="h-full bg-purple-500 rounded-full"
-                                style={{ width: `${c.progress}%` }}
-                              />
-                            </div>
+                          ))
+                        ) : (
+                          <div className="p-3 rounded-xl bg-white/3 border border-white/5">
+                            <p className="text-xs text-gray-400">No active course enrollments yet.</p>
+                            <p className="text-[10px] text-gray-600 mt-0.5">Enroll from Classes Marketplace to track progress here.</p>
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
                   </SectionCard>
 
                   <SectionCard icon={ChevronRight} title="My Journey" subtitle="Your milestones so far">
-                    <p className="text-[10px] text-gray-600 mb-3">(Sample data for now)</p>
                     <div className="flex flex-col gap-0">
                       {journeyMilestones.map((m, i) => (
-                        <div key={m.label} className="flex gap-3">
+                        <div key={`${m.label}-${i}`} className="flex gap-3">
                           <div className="flex flex-col items-center">
                             <div
                               className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
