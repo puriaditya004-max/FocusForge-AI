@@ -82,6 +82,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  async function deleteAccount(password, confirmation) {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ password, confirmation }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.message || "Failed to delete account.");
+    }
+    setUser(null);
+    return data;
+  }
+
   const value = {
     user,
     loading,
@@ -89,6 +104,7 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
