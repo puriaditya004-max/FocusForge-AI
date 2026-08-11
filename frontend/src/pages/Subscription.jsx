@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
@@ -441,6 +442,17 @@ export default function Subscription() {
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Web checkout can use Razorpay. Play Store Android builds must use Google Play Billing or the India Alternative Billing program before showing Razorpay inside the app.
                 </p>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                  <Link to="/subscription-policy" className="text-purple-300 hover:text-purple-200 hover:underline">
+                    Subscription Policy
+                  </Link>
+                  <Link to="/refund-policy" className="text-purple-300 hover:text-purple-200 hover:underline">
+                    Refund Policy
+                  </Link>
+                  <Link to="/terms" className="text-purple-300 hover:text-purple-200 hover:underline">
+                    Terms
+                  </Link>
+                </div>
               </section>
             </div>
           )}
