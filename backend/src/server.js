@@ -6,10 +6,14 @@
 require("dotenv").config();
 const http = require("http");
 const { Server } = require("socket.io");
-const app = require("./app");
 const studyRoomSocket = require("./sockets/studyroom.socket");
 const redisClient = require("./config/redis");
 const logger = require("./utils/logger");
+const { validateProductionEnv } = require("./config/env");
+
+validateProductionEnv();
+
+const app = require("./app");
 
 // Crashes that happen outside any Express route (a rejected promise
 // nobody awaited, a genuinely uncaught throw) never hit app.js's
