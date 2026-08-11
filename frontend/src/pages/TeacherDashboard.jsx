@@ -54,6 +54,7 @@ export default function TeacherDashboard() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [respondingId, setRespondingId] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -88,8 +89,10 @@ export default function TeacherDashboard() {
       ]);
       const overviewData = await overviewRes.json();
       const requestsData = await requestsRes.json();
+
       if (!overviewRes.ok) throw new Error(overviewData.error || "Failed to load overview.");
       if (!requestsRes.ok) throw new Error(requestsData.error || "Failed to load requests.");
+
       setOverview(overviewData);
       setRequests(requestsData.requests || []);
     } catch (err) {
@@ -104,6 +107,9 @@ export default function TeacherDashboard() {
     if (!title.trim()) return;
 
     setCreating(true);
+    setError(null);
+    setSuccess(null);
+
     try {
       const res = await fetch(`${API_BASE}/teacher/courses`, {
         method: "POST",
@@ -112,11 +118,14 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ title, description, price }),
       });
       const data = await res.json();
+
       if (!res.ok) throw new Error(data.error || "Failed to create course.");
+
       setTitle("");
       setDescription("");
       setPrice("");
       setShowForm(false);
+      setSuccess("Course created. It is now available from your teacher dashboard.");
       fetchAll();
     } catch (err) {
       setError(err.message);
@@ -127,11 +136,16 @@ export default function TeacherDashboard() {
 
   async function handleSubmitVerification(e) {
     e.preventDefault();
+
     if (!verificationForm.idDocument) {
       setError("ID document is required for teacher verification.");
       return;
     }
+
     setSubmittingVerification(true);
+    setError(null);
+    setSuccess(null);
+
     try {
       const res = await fetch(`${API_BASE}/teacher/verification`, {
         method: "POST",
@@ -149,8 +163,11 @@ export default function TeacherDashboard() {
         }),
       });
       const data = await res.json();
+
       if (!res.ok) throw new Error(data.error || "Failed to submit verification.");
+
       setVerificationForm((prev) => ({ ...prev, idDocument: null, educationDocument: null }));
+      setSuccess("Verification submitted. Admin review is now pending.");
       fetchAll();
     } catch (err) {
       setError(err.message);
@@ -161,12 +178,17 @@ export default function TeacherDashboard() {
 
   async function handleUploadVideo(e) {
     e.preventDefault();
+
     if (!videoForm.courseId || !videoForm.title || !videoForm.videoFile) {
       setError("Select a course, lesson title, and video file.");
       return;
     }
+
     setUploadingVideo(true);
     setUploadProgress(0);
+    setError(null);
+    setSuccess(null);
+
     try {
       const formData = new FormData();
       formData.append("title", videoForm.title);
@@ -194,6 +216,7 @@ export default function TeacherDashboard() {
       });
 
       setVideoForm({ courseId: "", title: "", videoFile: null });
+      setSuccess("Lesson video uploaded.");
       fetchAll();
     } catch (err) {
       setError(err.message);
@@ -205,6 +228,9 @@ export default function TeacherDashboard() {
 
   async function handleRespond(enrollmentId, action) {
     setRespondingId(enrollmentId);
+    setError(null);
+    setSuccess(null);
+
     try {
       const res = await fetch(`${API_BASE}/teacher/enrollment-requests/${enrollmentId}/respond`, {
         method: "POST",
@@ -213,7 +239,10 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ action }),
       });
       const data = await res.json();
+
       if (!res.ok) throw new Error(data.error || "Failed to respond.");
+
+      setSuccess(action === "approve" ? "Enrollment request approved." : "Enrollment request rejected.");
       fetchAll();
     } catch (err) {
       setError(err.message);
@@ -229,13 +258,16 @@ export default function TeacherDashboard() {
           <h1 className="text-lg font-semibold">Teacher Dashboard</h1>
           <p className="text-xs text-gray-500">Welcome, {user?.name}</p>
         </div>
+
         <div className="flex items-center gap-2">
           <button
             onClick={fetchAll}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition"
+            disabled={loading}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
           >
-            <RefreshCw size={13} /> Refresh
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
+
           <button
             onClick={logout}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 border border-white/10 hover:bg-white/5 px-3 py-1.5 rounded-lg transition"
@@ -249,6 +281,15 @@ export default function TeacherDashboard() {
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm rounded-xl p-3 mb-4">
             {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-500/10 border border-green-500/30 text-green-300 text-sm rounded-xl p-3 mb-4 flex items-center justify-between gap-3">
+            <span>{success}</span>
+            <button onClick={() => setSuccess(null)} className="text-green-300/70 hover:text-green-200 text-xs">
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -266,17 +307,17 @@ export default function TeacherDashboard() {
                     <p className="text-xs text-gray-500">
                       Status: <span className="text-purple-300">{overview?.verificationStatus || "NOT_SUBMITTED"}</span>
                       {overview?.teacherVerifiedAt && (
-                        <> · Approved {new Date(overview.teacherVerifiedAt).toLocaleDateString("en-IN")}</>
+                        <> - Approved {new Date(overview.teacherVerifiedAt).toLocaleDateString("en-IN")}</>
                       )}
                     </p>
+
                     {overview?.verificationStatus === "REJECTED" && overview?.verificationReviewerNotes && (
-                      <p className="text-xs text-red-300 mt-2">
-                        Admin note: {overview.verificationReviewerNotes}
-                      </p>
+                      <p className="text-xs text-red-300 mt-2">Admin note: {overview.verificationReviewerNotes}</p>
                     )}
+
                     {overview?.verificationStatus === "PENDING" && overview?.verificationSubmittedAt && (
                       <p className="text-xs text-yellow-300 mt-2">
-                        Submitted {new Date(overview.verificationSubmittedAt).toLocaleDateString("en-IN")} · waiting for admin review.
+                        Submitted {new Date(overview.verificationSubmittedAt).toLocaleDateString("en-IN")} - waiting for admin review.
                       </p>
                     )}
                   </div>
@@ -309,24 +350,31 @@ export default function TeacherDashboard() {
                       placeholder="Experience years"
                       className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
                     />
+
                     <label className="text-xs text-gray-400">
                       ID document
                       <input
                         type="file"
                         accept="application/pdf,image/png,image/jpeg"
-                        onChange={(e) => setVerificationForm((p) => ({ ...p, idDocument: e.target.files?.[0] || null }))}
+                        onChange={(e) =>
+                          setVerificationForm((p) => ({ ...p, idDocument: e.target.files?.[0] || null }))
+                        }
                         className="mt-1 block w-full text-xs"
                       />
                     </label>
+
                     <label className="text-xs text-gray-400">
                       Education document
                       <input
                         type="file"
                         accept="application/pdf,image/png,image/jpeg"
-                        onChange={(e) => setVerificationForm((p) => ({ ...p, educationDocument: e.target.files?.[0] || null }))}
+                        onChange={(e) =>
+                          setVerificationForm((p) => ({ ...p, educationDocument: e.target.files?.[0] || null }))
+                        }
                         className="mt-1 block w-full text-xs"
                       />
                     </label>
+
                     <button
                       type="submit"
                       disabled={submittingVerification}
@@ -363,7 +411,9 @@ export default function TeacherDashboard() {
                     : "Route account not linked. Payouts stay NOT_READY until this is added in Settings."}
                 </p>
                 {overview?.razorpayRouteAccountId && (
-                  <p className="text-[10px] text-green-300 mt-2 font-mono break-all">{overview.razorpayRouteAccountId}</p>
+                  <p className="text-[10px] text-green-300 mt-2 font-mono break-all">
+                    {overview.razorpayRouteAccountId}
+                  </p>
                 )}
               </div>
             </div>
@@ -374,6 +424,7 @@ export default function TeacherDashboard() {
               <StatCard icon={Clock3} label="Pending Requests" value={overview?.pendingRequestCount ?? 0} tone="text-yellow-400" />
               <StatCard icon={Video} label="Paid Payments" value={overview?.paidPaymentCount ?? 0} />
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <StatCard icon={IndianRupee} label="Gross Revenue" value={formatMoneyPaise(overview?.grossRevenuePaise)} tone="text-green-400" />
               <StatCard icon={IndianRupee} label="Teacher Earnings" value={formatMoneyPaise(overview?.teacherEarningsPaise)} tone="text-purple-300" />
@@ -389,12 +440,15 @@ export default function TeacherDashboard() {
               ) : (
                 <div className="space-y-3">
                   {requests.map((r) => (
-                    <div key={r.enrollmentId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 rounded-xl p-3">
+                    <div
+                      key={r.enrollmentId}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 rounded-xl p-3"
+                    >
                       <div>
                         <p className="font-medium text-sm">{r.studentName}</p>
                         <p className="text-xs text-gray-500">{r.studentEmail}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          Wants: <span className="text-purple-300">{r.courseTitle}</span> · {formatMoneyRupees(r.coursePrice)}
+                          Wants: <span className="text-purple-300">{r.courseTitle}</span> - {formatMoneyRupees(r.coursePrice)}
                         </p>
                         <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                           <Phone size={11} /> {r.contactNumber}
@@ -441,10 +495,31 @@ export default function TeacherDashboard() {
                       Courses can only be published after admin approves your teacher verification.
                     </div>
                   )}
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Course title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
-                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short description (optional)" rows={2} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500 resize-none" />
-                  <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price in Rs (0 for free)" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
-                  <button type="submit" disabled={creating || overview?.verificationStatus !== "APPROVED"} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60">
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Course title"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                  />
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Short description (optional)"
+                    rows={2}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500 resize-none"
+                  />
+                  <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="Price in Rs (0 for free)"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creating || overview?.verificationStatus !== "APPROVED"}
+                    className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60"
+                  >
                     {creating ? "Creating..." : overview?.verificationStatus === "APPROVED" ? "Create Course" : "Verification Required"}
                   </button>
                 </form>
@@ -457,21 +532,50 @@ export default function TeacherDashboard() {
                       Lesson uploads are locked until your teacher verification is approved.
                     </div>
                   )}
-                  <select value={videoForm.courseId} onChange={(e) => setVideoForm((p) => ({ ...p, courseId: e.target.value }))} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500">
+
+                  <select
+                    value={videoForm.courseId}
+                    onChange={(e) => setVideoForm((p) => ({ ...p, courseId: e.target.value }))}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                  >
                     <option value="">Select course</option>
                     {overview.courses.map((c) => (
-                      <option key={c.id} value={c.id}>{c.title}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
                     ))}
                   </select>
-                  <input value={videoForm.title} onChange={(e) => setVideoForm((p) => ({ ...p, title: e.target.value }))} placeholder="Lesson title" className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
-                  <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(e) => setVideoForm((p) => ({ ...p, videoFile: e.target.files?.[0] || null }))} className="text-xs text-gray-400" />
-                  <button type="submit" disabled={uploadingVideo || overview?.verificationStatus !== "APPROVED"} className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2">
-                    <Video size={14} /> {uploadingVideo ? `Uploading... ${uploadProgress}%` : overview?.verificationStatus === "APPROVED" ? "Add Video" : "Verification Required"}
+
+                  <input
+                    value={videoForm.title}
+                    onChange={(e) => setVideoForm((p) => ({ ...p, title: e.target.value }))}
+                    placeholder="Lesson title"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500"
+                  />
+
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={(e) => setVideoForm((p) => ({ ...p, videoFile: e.target.files?.[0] || null }))}
+                    className="text-xs text-gray-400"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={uploadingVideo || overview?.verificationStatus !== "APPROVED"}
+                    className="bg-purple-600 hover:bg-purple-700 transition text-white py-2 rounded-lg text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    <Video size={14} />{" "}
+                    {uploadingVideo
+                      ? `Uploading... ${uploadProgress}%`
+                      : overview?.verificationStatus === "APPROVED"
+                      ? "Add Video"
+                      : "Verification Required"}
                   </button>
                 </form>
               )}
 
-              {(!overview?.courses || overview.courses.length === 0) ? (
+              {!overview?.courses || overview.courses.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-6">No courses yet. Create your first one above.</p>
               ) : (
                 <div className="space-y-3">
@@ -480,9 +584,9 @@ export default function TeacherDashboard() {
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{c.title}</p>
                         <p className="text-xs text-gray-500">
-                          {formatMoneyRupees(c.price)} · {c.studentsEnrolled} students · {c.videoCount} videos
-                          {c.pendingRequests > 0 && <span className="text-yellow-400"> · {c.pendingRequests} pending</span>}
-                          {c.previewVideoCount > 0 && <span className="text-purple-300"> · {c.previewVideoCount} preview</span>}
+                          {formatMoneyRupees(c.price)} - {c.studentsEnrolled} students - {c.videoCount} videos
+                          {c.pendingRequests > 0 && <span className="text-yellow-400"> - {c.pendingRequests} pending</span>}
+                          {c.previewVideoCount > 0 && <span className="text-purple-300"> - {c.previewVideoCount} preview</span>}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
