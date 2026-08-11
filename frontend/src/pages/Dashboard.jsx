@@ -11,16 +11,6 @@ import { buildSpokenGreeting, speak } from "../utils/voice";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const timetableData = [
-  { time: "06:00 AM", title: "Wake Up & Fresh", status: "completed" },
-  { time: "07:00 AM", title: "Python – Functions, Loops, OOP", status: "current" },
-  { time: "08:00 AM", title: "Break", status: "upcoming" },
-  { time: "09:00 AM", title: "Practice Coding", status: "upcoming" },
-  { time: "10:00 AM", title: "Data Structures – Arrays", status: "upcoming" },
-  { time: "11:00 AM", title: "Build Mini Project", status: "upcoming" },
-  { time: "12:00 PM", title: "Lunch & Rest", status: "upcoming" },
-];
-
 function formatStudyTime(totalSeconds) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -66,6 +56,7 @@ export default function Dashboard() {
   const stats = dashboardData?.stats;
   const currentTask = dashboardData?.currentTask;
   const user = dashboardData?.user;
+  const schedule = dashboardData?.schedule || [];
 
   return (
     <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -119,45 +110,60 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-6 mt-4">
               <section className="lg:col-span-1 bg-[#13131f] rounded-2xl p-4 border border-white/5">
-                <h2 className="font-semibold mb-3">Smart Timetable</h2>
-                <ul className="space-y-3">
-                  {timetableData.map((item) => (
-                    <li key={item.time} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs text-gray-400">{item.time}</p>
-                        <p
+                <h2 className="font-semibold mb-3">Today's Schedule</h2>
+                {schedule.length > 0 ? (
+                  <ul className="space-y-3">
+                    {schedule.slice(0, 7).map((item) => (
+                      <li key={item.id} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-400">
+                            {item.time}
+                            {item.duration ? ` · ${item.duration}` : ""}
+                          </p>
+                          <p
+                            className={`truncate ${
+                              item.status === "current"
+                                ? "text-purple-300 font-medium"
+                                : "text-gray-200"
+                            }`}
+                          >
+                            {item.title}
+                          </p>
+                          {item.subject && (
+                            <p className="text-[10px] text-gray-500 truncate">{item.subject}</p>
+                          )}
+                        </div>
+                        <span
                           className={
-                            item.status === "current"
-                              ? "text-purple-300 font-medium"
-                              : "text-gray-200"
+                            item.status === "completed"
+                              ? "text-green-400 text-xs flex-shrink-0"
+                              : item.status === "current"
+                              ? "text-purple-400 text-xs flex-shrink-0"
+                              : "text-orange-400 text-xs flex-shrink-0"
                           }
                         >
-                          {item.title}
-                        </p>
-                      </div>
-                      <span
-                        className={
-                          item.status === "completed"
-                            ? "text-green-400 text-xs"
+                          {item.status === "completed"
+                            ? "Done"
                             : item.status === "current"
-                            ? "text-purple-400 text-xs"
-                            : "text-orange-400 text-xs"
-                        }
-                      >
-                        {item.status === "completed"
-                          ? "Done"
-                          : item.status === "current"
-                          ? "Now"
-                          : "Upcoming"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                            ? "Now"
+                            : "Upcoming"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm font-medium text-gray-200 mb-1">No tasks scheduled yet</p>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Add tasks in Today's Plan to see your live schedule here.
+                    </p>
+                  </div>
+                )}
                 <button
-                  onClick={() => navigate("/timetable")}
+                  onClick={() => navigate("/todays-plan")}
                   className="w-full mt-3 text-sm text-purple-300 border border-purple-500/30 rounded-xl py-2 hover:bg-purple-700/20 transition-colors"
                 >
-                  View Full Timetable
+                  Open Today's Plan
                 </button>
               </section>
 
