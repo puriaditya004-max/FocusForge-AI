@@ -36,9 +36,8 @@ import {
 // Profile/Timetable/Preferences/Notifications/Appearance now
 // load and save from GET/PATCH /api/settings (real backend).
 //
-// "Reset all progress" is still UI-only for now (no backend
-// wipe logic yet) to avoid accidental data loss during
-// development/testing.
+// "Reset all progress" calls the backend and clears study/gamification
+// progress while preserving account, certificates, and payment records.
 //
 // AI Mentor API Key (BYOK) — Account & Data tab. Optional.
 // If empty, AI Mentor uses the app's free shared tier.
@@ -158,6 +157,8 @@ export default function Settings() {
   const [journeyMilestones, setJourneyMilestones] = useState([]);
 
   const [showResetModal, setShowResetModal] = useState(false);
+  const [resettingProgress, setResettingProgress] = useState(false);
+  const [resetError, setResetError] = useState("");
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -167,6 +168,34 @@ export default function Settings() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  function applySettingsData(data) {
+    setName(data.name);
+    setStartTime(data.studyStartTime);
+    setEndTime(data.studyEndTime);
+    setOffDays(data.offDays);
+    setDailyGoal(data.dailyGoalHours);
+    setBreakInterval(data.breakIntervalMin);
+    setFocusSensitivity(data.focusSensitivity);
+    setNotifs({
+      dailyReminder: data.dailyReminderOn,
+      reminderTime: data.reminderTime,
+      streakAlert: data.streakAlertOn,
+      weeklySummary: data.weeklySummaryOn,
+    });
+    setTheme(normalizeTheme(data.theme));
+    applyTheme(data.theme);
+    setAccent(data.accentColor);
+    setLevel(data.level);
+    setCurrentStreak(data.currentStreak);
+    setJoinedDate(data.joinedDate);
+    setCertificatesEarned(data.certificatesEarned || []);
+    setCoursesInProgress(data.coursesInProgress || []);
+    setJourneyMilestones(data.journeyMilestones || []);
+    setMentorApiKey("");
+    setMaskedApiKey(data.mentorApiKey || "");
+    setApiKeySaved(Boolean(data.hasMentorApiKey));
+  }
 
   async function fetchSettings() {
     try {
@@ -179,31 +208,7 @@ export default function Settings() {
         throw new Error(data.message || data.error || "Failed to load settings");
       }
 
-      setName(data.name);
-      setStartTime(data.studyStartTime);
-      setEndTime(data.studyEndTime);
-      setOffDays(data.offDays);
-      setDailyGoal(data.dailyGoalHours);
-      setBreakInterval(data.breakIntervalMin);
-      setFocusSensitivity(data.focusSensitivity);
-      setNotifs({
-        dailyReminder: data.dailyReminderOn,
-        reminderTime: data.reminderTime,
-        streakAlert: data.streakAlertOn,
-        weeklySummary: data.weeklySummaryOn,
-      });
-      setTheme(normalizeTheme(data.theme));
-      applyTheme(data.theme);
-      setAccent(data.accentColor);
-      setLevel(data.level);
-      setCurrentStreak(data.currentStreak);
-      setJoinedDate(data.joinedDate);
-      setCertificatesEarned(data.certificatesEarned || []);
-      setCoursesInProgress(data.coursesInProgress || []);
-      setJourneyMilestones(data.journeyMilestones || []);
-      setMentorApiKey(""); // never prefill — the backend only ever sends a masked value
-      setMaskedApiKey(data.mentorApiKey || "");
-      setApiKeySaved(Boolean(data.hasMentorApiKey));
+      applySettingsData(data);
       setError("");
     } catch (err) {
       setError(err.message || "Failed to load settings");
@@ -290,6 +295,33 @@ export default function Settings() {
     link.download = "focusforge-progress.json";
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleResetProgress() {
+    try {
+      setResetError("");
+      setResettingProgress(true);
+      const res = await fetch(`${API_BASE}/settings/reset-progress`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "Failed to reset progress");
+      }
+      if (data.settings) {
+        applySettingsData(data.settings);
+      } else {
+        await fetchSettings();
+      }
+      setShowResetModal(false);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus(""), 1500);
+    } catch (err) {
+      setResetError(err.message || "Failed to reset progress");
+    } finally {
+      setResettingProgress(false);
+    }
   }
 
   async function handleDeleteAccount() {
@@ -883,12 +915,12 @@ export default function Settings() {
                         <p className="text-[10px] text-gray-500 mt-0.5">
                           Clears XP, badges, streaks, and history — cannot be undone
                         </p>
-                        <p className="text-[10px] text-gray-600 mt-0.5">
-                          (Not yet wired to the backend — coming in a later step)
-                        </p>
                       </div>
                       <button
-                        onClick={() => setShowResetModal(true)}
+                        onClick={() => {
+                          setResetError("");
+                          setShowResetModal(true);
+                        }}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs text-red-400"
                       >
                         <Trash2 size={13} /> Reset
@@ -957,7 +989,14 @@ export default function Settings() {
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                 <AlertTriangle size={18} className="text-red-400" />
               </div>
-              <button onClick={() => setShowResetModal(false)} className="text-gray-500 hover:text-gray-300">
+              <button
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetError("");
+                }}
+                disabled={resettingProgress}
+                className="text-gray-500 hover:text-gray-300 disabled:opacity-40"
+              >
                 <X size={16} />
               </button>
             </div>
@@ -967,21 +1006,24 @@ export default function Settings() {
               history. Certificates already earned will not be affected. This action
               cannot be undone.
             </p>
-            <p className="text-[10px] text-gray-600 mb-4">
-              (This isn't connected to the backend yet — nothing will actually be deleted.)
-            </p>
+            {resetError && <p className="text-[10px] text-red-400 mb-4">{resetError}</p>}
             <div className="flex gap-2">
               <button
-                onClick={() => setShowResetModal(false)}
-                className="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-gray-300 border border-white/10"
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetError("");
+                }}
+                disabled={resettingProgress}
+                className="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-gray-300 border border-white/10 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={() => setShowResetModal(false)}
-                className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-xs text-white font-medium"
+                onClick={handleResetProgress}
+                disabled={resettingProgress}
+                className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-xs text-white font-medium disabled:opacity-60"
               >
-                Yes, reset
+                {resettingProgress ? "Resetting..." : "Yes, reset"}
               </button>
             </div>
           </div>
