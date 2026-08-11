@@ -8,6 +8,12 @@ const prisma = require("../config/db");
 const logger = require("../utils/logger");
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const DEFAULT_SUGGESTED_QUERIES = [
+  "study techniques for students",
+  "time management for exams",
+  "productive study routine",
+  "how to revise effectively",
+];
 
 function normalizeVideo(item) {
   return {
@@ -22,7 +28,7 @@ function normalizeVideo(item) {
 
 async function searchYoutubeApi(query, maxResults = 12) {
   if (!YOUTUBE_API_KEY) {
-    const err = new Error("YouTube API key not configured on server.");
+    const err = new Error("YouTube search is not configured yet. Add YOUTUBE_API_KEY on the server.");
     err.statusCode = 500;
     throw err;
   }
@@ -34,9 +40,21 @@ async function searchYoutubeApi(query, maxResults = 12) {
   const response = await fetch(url);
   const data = await response.json();
 
+  if (!response.ok) {
+    logger.error("YouTube API HTTP error:", data);
+    const reason = data.error?.errors?.[0]?.reason;
+    const err = new Error(
+      reason === "quotaExceeded"
+        ? "YouTube search quota is exhausted for now. Try again later."
+        : "YouTube search is temporarily unavailable."
+    );
+    err.statusCode = response.status >= 500 ? 502 : response.status;
+    throw err;
+  }
+
   if (data.error) {
     logger.error("YouTube API error:", data.error);
-    const err = new Error("YouTube API request failed.");
+    const err = new Error("YouTube search is temporarily unavailable.");
     err.statusCode = 500;
     throw err;
   }
@@ -79,10 +97,14 @@ async function buildRecommendationContext(userId) {
     activeRoadmap?.monthLabel,
   ].filter(Boolean);
 
-  const fallbackQueries = roadmapItems
-    .slice(0, 4)
-    .map((item) => `${item.title} ${item.monthLabel}`.trim())
-    .filter(Boolean);
+  const suggestedQueries = [
+    ...queryParts,
+    ...roadmapItems
+      .slice(0, 4)
+      .map((item) => `${item.title} ${item.monthLabel}`.trim())
+      .filter(Boolean),
+    ...DEFAULT_SUGGESTED_QUERIES,
+  ].filter((value, index, list) => value && list.indexOf(value) === index);
 
   return {
     currentTask: currentTask
@@ -101,7 +123,7 @@ async function buildRecommendationContext(userId) {
         }
       : null,
     query: queryParts.length ? `${queryParts.join(" ")} tutorial for students` : "",
-    suggestedQueries: fallbackQueries,
+    suggestedQueries,
   };
 }
 
@@ -114,7 +136,6 @@ async function searchYoutube(req, res) {
     }
 
     const results = await searchYoutubeApi(q.trim());
-
     res.json({ results });
   } catch (err) {
     logger.error("searchYoutube error:", err);
