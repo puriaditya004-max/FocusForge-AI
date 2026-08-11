@@ -85,7 +85,7 @@ async function signup(req, res) {
     const token = signToken(user);
     res.cookie("token", token, COOKIE_OPTIONS);
 
-    return res.status(201).json({ user: toSafeUser(user), token });
+    return res.status(201).json({ user: toSafeUser(user) });
   } catch (err) {
     logger.error("Signup error:", err);
     return res.status(500).json({ error: "Something went wrong while creating your account." });
@@ -111,7 +111,7 @@ async function login(req, res) {
     const token = signToken(user);
     res.cookie("token", token, COOKIE_OPTIONS);
 
-    return res.json({ user: toSafeUser(user), token });
+    return res.json({ user: toSafeUser(user) });
   } catch (err) {
     logger.error("Login error:", err);
     return res.status(500).json({ error: "Something went wrong while logging in." });
