@@ -224,4 +224,74 @@ async function verifyOtp(req, res) {
   }
 }
 
-module.exports = { signup, login, logout, me, requestOtp, verifyOtp };
+// DELETE /api/auth/me
+async function deleteAccount(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { password } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: "User not found." });
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid password." });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const userPaymentsWhere = {
+        OR: [{ studentId: userId }, { course: { teacherId: userId } }],
+      };
+
+      await tx.studyRoomMessageReport.deleteMany({
+        where: { OR: [{ reportedById: userId }, { resolvedById: userId }] },
+      });
+      await tx.paymentRefund.deleteMany({
+        where: { OR: [{ requestedById: userId }, { payment: userPaymentsWhere }] },
+      });
+      await tx.invoice.deleteMany({ where: { payment: userPaymentsWhere } });
+      await tx.payment.deleteMany({ where: userPaymentsWhere });
+
+      await tx.enrollment.deleteMany({
+        where: { OR: [{ studentId: userId }, { course: { teacherId: userId } }] },
+      });
+      await tx.courseVideo.deleteMany({ where: { course: { teacherId: userId } } });
+      await tx.course.deleteMany({ where: { teacherId: userId } });
+
+      await tx.subscriptionPayment.deleteMany({ where: { userId } });
+      await tx.subscription.deleteMany({ where: { userId } });
+      await tx.studentParentLink.deleteMany({
+        where: { OR: [{ studentId: userId }, { parentId: userId }] },
+      });
+      await tx.roomMember.deleteMany({ where: { userId } });
+      await tx.room.updateMany({ where: { createdById: userId }, data: { createdById: null } });
+
+      await tx.task.deleteMany({ where: { userId } });
+      await tx.roadmapItem.deleteMany({ where: { userId } });
+      await tx.focusSession.deleteMany({ where: { userId } });
+      await tx.userBadge.deleteMany({ where: { userId } });
+      await tx.dailyChallenge.deleteMany({ where: { userId } });
+      await tx.certificate.deleteMany({ where: { userId } });
+      await tx.examAttempt.deleteMany({ where: { userId } });
+      await tx.penaltyEvent.deleteMany({ where: { userId } });
+      await tx.activityLog.deleteMany({ where: { userId } });
+      await tx.studyRoomMessage.deleteMany({ where: { userId } });
+      await tx.aiMentorMessage.deleteMany({ where: { userId } });
+      await tx.savedVideo.deleteMany({ where: { userId } });
+      await tx.quizAttempt.deleteMany({ where: { userId } });
+      await tx.otpChallenge.deleteMany({ where: { userId } });
+      await tx.teacherVerification.deleteMany({ where: { teacherId: userId } });
+      await tx.digitalId.deleteMany({ where: { userId } });
+
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    res.clearCookie("token", COOKIE_OPTIONS);
+    return res.json({ message: "Account and personal data deleted." });
+  } catch (err) {
+    logger.error("deleteAccount error:", err);
+    return res.status(500).json({ error: "Failed to delete account." });
+  }
+}
+
+module.exports = { signup, login, logout, me, requestOtp, verifyOtp, deleteAccount };
