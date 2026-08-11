@@ -26,9 +26,53 @@ function generateCertCode(topic) {
   return `FF-${slug}-${random}`;
 }
 
+function parseTopicFromMonthLabel(monthLabel) {
+  return String(monthLabel || "").replace(/\s+Month\s+\d+.*/i, "").split(":")[0]?.trim();
+}
+
+async function resolveCertificateContext(userId, requestedTopic) {
+  const availableTopics = Object.keys(CERTIFICATE_QUESTIONS);
+  let topic = requestedTopic && CERTIFICATE_QUESTIONS[requestedTopic] ? requestedTopic : null;
+
+  const monthItems = await prisma.roadmapItem.findMany({
+    where: { userId, monthNumber: 1 },
+    orderBy: { weekNumber: "asc" },
+  });
+
+  if (!topic && monthItems.length) {
+    const candidates = monthItems.flatMap((item) => [
+      item.monthLabel,
+      parseTopicFromMonthLabel(item.monthLabel),
+      item.title,
+    ]);
+    topic = candidates.find((candidate) => candidate && CERTIFICATE_QUESTIONS[candidate]) || null;
+  }
+
+  if (!topic) {
+    topic = availableTopics[0] || null;
+  }
+
+  const projectsRequired = monthItems
+    .map((item) => item.project)
+    .filter(Boolean);
+  const completedItems = monthItems.filter((item) => item.status === "COMPLETED").length;
+  const roadmapPercent = monthItems.length
+    ? Math.round((completedItems / monthItems.length) * 100)
+    : 0;
+
+  return {
+    topic,
+    projectsRequired,
+    roadmapPercent,
+    roadmapComplete: monthItems.length > 0 && completedItems === monthItems.length,
+    totalRoadmapItems: monthItems.length,
+  };
+}
+
 // Build the status object the frontend needs to render the
 // Intro / Locked / Certificate screens correctly.
-async function buildStatus(userId, topic) {
+async function buildStatus(userId, context) {
+  const { topic } = context;
   const attempts = await prisma.examAttempt.findMany({
     where: { userId, topic },
     orderBy: { attemptNumber: "asc" },
@@ -49,8 +93,16 @@ async function buildStatus(userId, topic) {
   const isLocked = attemptsUsed >= MAX_ATTEMPTS && !certificate;
 
   return {
-    attemptsUsed,
+    topic,
+    passScore: PASS_SCORE,
     maxAttempts: MAX_ATTEMPTS,
+    cooldownDays: COOLDOWN_DAYS,
+    totalQuestions: CERTIFICATE_QUESTIONS[topic]?.length || 0,
+    projectsRequired: context.projectsRequired,
+    roadmapPercent: context.roadmapPercent,
+    roadmapComplete: context.roadmapComplete,
+    totalRoadmapItems: context.totalRoadmapItems,
+    attemptsUsed,
     certEarned: !!certificate,
     certificate: certificate
       ? {
@@ -74,17 +126,15 @@ async function buildStatus(userId, topic) {
 const getQuestions = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const topic = req.query.topic;
-    if (!topic) {
-      return res.status(400).json({ message: "topic query param is required" });
-    }
+    const context = await resolveCertificateContext(userId, req.query.topic);
+    const { topic } = context;
 
     const bank = CERTIFICATE_QUESTIONS[topic];
     if (!bank) {
       return res.status(404).json({ message: "No question bank found for this topic" });
     }
 
-    const status = await buildStatus(userId, topic);
+    const status = await buildStatus(userId, context);
     if (status.isLocked) {
       return res.status(403).json({ message: "No attempts remaining for this certificate" });
     }
@@ -96,7 +146,13 @@ const getQuestions = async (req, res) => {
     }
 
     const safeQuestions = bank.map(({ id, type, q, options }) => ({ id, type, q, options }));
-    res.status(200).json({ questions: safeQuestions, totalQuestions: bank.length });
+    res.status(200).json({
+      topic,
+      questions: safeQuestions,
+      totalQuestions: bank.length,
+      passScore: PASS_SCORE,
+      maxAttempts: MAX_ATTEMPTS,
+    });
   } catch (err) {
     logger.error("getQuestions error:", err);
     res.status(500).json({ message: "Failed to fetch exam questions" });
@@ -107,11 +163,8 @@ const getQuestions = async (req, res) => {
 const getStatus = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const topic = req.query.topic;
-    if (!topic) {
-      return res.status(400).json({ message: "topic query param is required" });
-    }
-    const status = await buildStatus(userId, topic);
+    const context = await resolveCertificateContext(userId, req.query.topic);
+    const status = await buildStatus(userId, context);
     res.status(200).json(status);
   } catch (err) {
     logger.error("getStatus error:", err);
@@ -127,10 +180,12 @@ const getStatus = async (req, res) => {
 const submitExam = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { topic, answers, projectsCompleted, startedAt } = req.body;
+    const { topic: requestedTopic, answers, startedAt } = req.body;
+    const context = await resolveCertificateContext(userId, requestedTopic);
+    const { topic, projectsRequired } = context;
 
     if (!topic || !answers || typeof answers !== "object") {
-      return res.status(400).json({ message: "topic and answers are required" });
+      return res.status(400).json({ message: "answers are required" });
     }
 
     const bank = CERTIFICATE_QUESTIONS[topic];
@@ -138,7 +193,7 @@ const submitExam = async (req, res) => {
       return res.status(404).json({ message: "No question bank found for this topic" });
     }
 
-    const status = await buildStatus(userId, topic);
+    const status = await buildStatus(userId, context);
     if (status.isLocked) {
       return res.status(403).json({ message: "No attempts remaining for this certificate" });
     }
@@ -180,12 +235,12 @@ const submitExam = async (req, res) => {
           certificateCode: generateCertCode(topic),
           title: topic,
           score: pct,
-          projectsCompleted: projectsCompleted || [],
+          projectsCompleted: projectsRequired || [],
         },
       });
     }
 
-    const updatedStatus = await buildStatus(userId, topic);
+    const updatedStatus = await buildStatus(userId, context);
     res.status(200).json({ ...updatedStatus, score: pct, passed, correct, totalQuestions });
   } catch (err) {
     logger.error("submitExam error:", err);
