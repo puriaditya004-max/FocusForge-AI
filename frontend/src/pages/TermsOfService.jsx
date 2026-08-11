@@ -20,6 +20,14 @@ export default function TermsOfService() {
             <Link to="/privacy-policy" className="text-purple-400 hover:underline">
               Privacy Policy
             </Link>
+            ,{" "}
+            <Link to="/subscription-policy" className="text-purple-400 hover:underline">
+              Subscription and Cancellation Policy
+            </Link>
+            , and{" "}
+            <Link to="/refund-policy" className="text-purple-400 hover:underline">
+              Refund Policy
+            </Link>
             .
           </p>
 
@@ -72,15 +80,15 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-2">5. Marketplace — courses, teachers, and payment</h2>
             <p className="mb-2">
-              The Marketplace lets Teachers list courses and Students enroll. FocusForge AI does not
-              process payments — we do not currently integrate a payment gateway. When you enroll in
-              a paid course, payment is confirmed manually and directly between the Student and the
-              Teacher, outside the app.
+              The Marketplace lets Teachers list courses and Students enroll. Some marketplace
+              payments may be handled through FocusForge-supported checkout, while other teacher
+              payments may require manual review or confirmation where clearly shown in the app.
             </p>
             <p>
-              We are not a party to that transaction, do not hold funds in escrow, and cannot
-              guarantee refunds, quality, or delivery of paid course content. We may remove Teachers
-              or listings we determine to be fraudulent, abusive, or in violation of these Terms.
+              We may review teacher listings, payment receipts, and enrollment disputes, but we do
+              not guarantee every teacher's course quality, schedule, or outcome. We may remove
+              Teachers or listings we determine to be fraudulent, abusive, or in violation of these
+              Terms.
             </p>
           </section>
 
@@ -108,9 +116,12 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-2">8. Fees</h2>
             <p>
-              The core FocusForge AI platform is currently free to use. Paid courses in the
-              Marketplace are set by individual Teachers. [Update this section as you introduce
-              subscriptions or paid tiers.]
+              FocusForge AI offers free, trial, and paid access depending on the feature and plan.
+              Subscription plan names, prices, duration, and included features are shown before
+              checkout. Web checkout can use Razorpay. Android builds distributed through Google
+              Play must use Google Play Billing or India's Alternative Billing program where
+              required before showing Razorpay inside the app. Subscription cancellation and refunds
+              are covered by the linked policies above.
             </p>
           </section>
 
