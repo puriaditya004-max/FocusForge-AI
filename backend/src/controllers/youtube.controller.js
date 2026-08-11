@@ -1,13 +1,109 @@
 // ---------------------------------------------------------
 // controllers/youtube.controller.js
-// Live YouTube search using YouTube Data API v3.
-// Does NOT touch savedvideo.controller.js or the curated
-// catalog — this is purely for real-time search results.
+// Live YouTube search and roadmap-aware recommendations using
+// YouTube Data API v3.
 // ---------------------------------------------------------
 
+const prisma = require("../config/db");
 const logger = require("../utils/logger");
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+
+function normalizeVideo(item) {
+  return {
+    videoId: item.id.videoId,
+    title: item.snippet.title,
+    channel: item.snippet.channelTitle,
+    channelTitle: item.snippet.channelTitle,
+    thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+    publishedAt: item.snippet.publishedAt,
+  };
+}
+
+async function searchYoutubeApi(query, maxResults = 12) {
+  if (!YOUTUBE_API_KEY) {
+    const err = new Error("YouTube API key not configured on server.");
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${maxResults}&q=${encodeURIComponent(
+    query
+  )}&key=${YOUTUBE_API_KEY}`;
+
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.error) {
+    logger.error("YouTube API error:", data.error);
+    const err = new Error("YouTube API request failed.");
+    err.statusCode = 500;
+    throw err;
+  }
+
+  return (data.items || []).map(normalizeVideo);
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+async function buildRecommendationContext(userId) {
+  const today = startOfToday();
+  const [tasks, roadmapItems] = await Promise.all([
+    prisma.task.findMany({
+      where: { userId, date: { gte: today } },
+      orderBy: [{ completed: "asc" }, { date: "asc" }, { time: "asc" }, { createdAt: "asc" }],
+      take: 5,
+    }),
+    prisma.roadmapItem.findMany({
+      where: { userId },
+      orderBy: { weekNumber: "asc" },
+      take: 8,
+    }),
+  ]);
+
+  const currentTask = tasks.find((task) => !task.completed) || tasks[0] || null;
+  const activeRoadmap =
+    roadmapItems.find((item) => item.status === "IN_PROGRESS") ||
+    roadmapItems.find((item) => item.status === "UPCOMING") ||
+    roadmapItems[0] ||
+    null;
+
+  const queryParts = [
+    currentTask?.title,
+    currentTask?.category,
+    activeRoadmap?.title,
+    activeRoadmap?.monthLabel,
+  ].filter(Boolean);
+
+  const fallbackQueries = roadmapItems
+    .slice(0, 4)
+    .map((item) => `${item.title} ${item.monthLabel}`.trim())
+    .filter(Boolean);
+
+  return {
+    currentTask: currentTask
+      ? {
+          id: currentTask.id,
+          title: currentTask.title,
+          subject: currentTask.category,
+        }
+      : null,
+    roadmapFocus: activeRoadmap
+      ? {
+          id: activeRoadmap.id,
+          weekNumber: activeRoadmap.weekNumber,
+          title: activeRoadmap.title,
+          monthLabel: activeRoadmap.monthLabel,
+        }
+      : null,
+    query: queryParts.length ? `${queryParts.join(" ")} tutorial for students` : "",
+    suggestedQueries: fallbackQueries,
+  };
+}
 
 async function searchYoutube(req, res) {
   try {
@@ -17,35 +113,38 @@ async function searchYoutube(req, res) {
       return res.status(400).json({ error: "Search query is required." });
     }
 
-    if (!YOUTUBE_API_KEY) {
-      return res.status(500).json({ error: "YouTube API key not configured on server." });
-    }
-
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=12&q=${encodeURIComponent(
-      q
-    )}&key=${YOUTUBE_API_KEY}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.error) {
-      logger.error("YouTube API error:", data.error);
-      return res.status(500).json({ error: "YouTube API request failed." });
-    }
-
-    const results = (data.items || []).map((item) => ({
-      videoId: item.id.videoId,
-      title: item.snippet.title,
-      channelTitle: item.snippet.channelTitle,
-      thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
-      publishedAt: item.snippet.publishedAt,
-    }));
+    const results = await searchYoutubeApi(q.trim());
 
     res.json({ results });
   } catch (err) {
     logger.error("searchYoutube error:", err);
-    res.status(500).json({ error: "Something went wrong while searching YouTube." });
+    res.status(err.statusCode || 500).json({
+      error: err.message || "Something went wrong while searching YouTube.",
+    });
   }
 }
 
-module.exports = { searchYoutube };
+async function getRecommendations(req, res) {
+  try {
+    const userId = req.user.userId;
+    const context = await buildRecommendationContext(userId);
+
+    if (!context.query) {
+      return res.status(200).json({
+        context,
+        results: [],
+        message: "Create a Smart Timetable or Today's Plan task to get video recommendations.",
+      });
+    }
+
+    const results = await searchYoutubeApi(context.query, 9);
+    res.status(200).json({ context, results });
+  } catch (err) {
+    logger.error("getRecommendations error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message || "Failed to load YouTube recommendations.",
+    });
+  }
+}
+
+module.exports = { searchYoutube, getRecommendations };
