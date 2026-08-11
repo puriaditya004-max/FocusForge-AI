@@ -32,7 +32,9 @@ const httpServer = http.createServer(app);
 // to accept connections from the Android/iOS app too.
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  process.env.ADMIN_URL,
   "http://localhost:5173",
+  "http://localhost:5174",
   "https://localhost",
   "capacitor://localhost",
 ].filter(Boolean);
