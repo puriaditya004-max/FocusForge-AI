@@ -32,12 +32,10 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const TOTAL_QUESTIONS = 50;
-const PASS_SCORE = 97; // percent
+const DEFAULT_TOTAL_QUESTIONS = 50;
+const DEFAULT_PASS_SCORE = 97; // percent
 const EXAM_MINUTES = 60;
-const MAX_ATTEMPTS = 2;
-const CERT_TOPIC = "Python – Month 1 Foundations";
-const CERT_PROJECTS = ["Simple Calculator", "To-Do List App"];
+const DEFAULT_MAX_ATTEMPTS = 2;
 
 // ── Questions ────────────────────────────────────────────
 // Question content + correct answers now live server-side only
@@ -77,7 +75,7 @@ export default function CertificateExam() {
   async function fetchStatus() {
     try {
       const res = await fetch(
-        `${API_BASE}/certificate-exam/status?topic=${encodeURIComponent(CERT_TOPIC)}`,
+        `${API_BASE}/certificate-exam/status`,
         { credentials: "include" }
       );
       const data = await res.json();
@@ -100,7 +98,7 @@ export default function CertificateExam() {
 
   async function fetchQuestions() {
     const res = await fetch(
-      `${API_BASE}/certificate-exam/questions?topic=${encodeURIComponent(CERT_TOPIC)}`,
+      `${API_BASE}/certificate-exam/questions`,
       { credentials: "include" }
     );
     const data = await res.json();
@@ -124,9 +122,8 @@ export default function CertificateExam() {
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            topic: CERT_TOPIC,
+            topic: status?.topic,
             answers: currentAnswers,
-            projectsCompleted: CERT_PROJECTS,
             startedAt: examStartedAt,
           }),
         });
@@ -144,7 +141,7 @@ export default function CertificateExam() {
         setSubmitting(false);
       }
     },
-    [examStartedAt]
+    [examStartedAt, status?.topic]
   );
 
   // Timer
@@ -223,6 +220,12 @@ export default function CertificateExam() {
   const answered = Object.keys(answers).length;
   const q = questions[current];
   const timerWarning = secondsLeft < 300;
+  const examTopic = status?.topic || "Certificate Exam";
+  const totalQuestions = questions.length || status?.totalQuestions || DEFAULT_TOTAL_QUESTIONS;
+  const passScore = status?.passScore || DEFAULT_PASS_SCORE;
+  const maxAttempts = status?.maxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const projectsRequired = status?.certificate?.projectsCompleted || status?.projectsRequired || [];
+  const projectSummary = projectsRequired.length ? projectsRequired.join(", ") : "Project evidence submitted in exam flow";
 
   // ────────────────────────────────────────────────────────
   // SCREEN: LOCKED
@@ -267,16 +270,16 @@ export default function CertificateExam() {
                 <Award size={36} className="text-yellow-400" />
                 <div>
                   <h1 className="text-xl font-bold">Certificate Exam</h1>
-                  <p className="text-sm text-gray-400">{CERT_TOPIC}</p>
+                  <p className="text-sm text-gray-400">{examTopic}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 {[
-                  { label: "Questions", value: `${TOTAL_QUESTIONS}` },
+                  { label: "Questions", value: `${totalQuestions}` },
                   { label: "Time Limit", value: `${EXAM_MINUTES} min` },
-                  { label: "Pass Score", value: `${PASS_SCORE}%` },
-                  { label: "Attempts Left", value: `${MAX_ATTEMPTS - status.attemptsUsed} / ${MAX_ATTEMPTS}` },
+                  { label: "Pass Score", value: `${passScore}%` },
+                  { label: "Attempts Left", value: `${maxAttempts - status.attemptsUsed} / ${maxAttempts}` },
                 ].map((s) => (
                   <div key={s.label} className="bg-[#0e0e18] rounded-xl p-3 text-center border border-white/5">
                     <p className="text-lg font-bold text-purple-300">{s.value}</p>
@@ -290,18 +293,18 @@ export default function CertificateExam() {
                   <AlertTriangle size={16} /> Rules — Read carefully
                 </p>
                 <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside">
-                  <li>50 questions: 40 theory MCQ + 10 project-based</li>
-                  <li>You need <span className="text-yellow-400 font-semibold">97% or above</span> (49 or 50 correct) to earn the certificate</li>
-                  <li>Maximum <span className="text-yellow-400 font-semibold">2 attempts</span> only — use them wisely</li>
-                  <li>If you fail, next attempt unlocks after <span className="text-yellow-400 font-semibold">4 days</span></li>
-                  <li>Timer is 60 minutes — exam auto-submits when time runs out</li>
+                  <li>{totalQuestions} questions: theory MCQ plus project-based checks</li>
+                  <li>You need <span className="text-yellow-400 font-semibold">{passScore}% or above</span> to earn the certificate</li>
+                  <li>Maximum <span className="text-yellow-400 font-semibold">{maxAttempts} attempts</span> only - use them wisely</li>
+                  <li>If you fail, next attempt unlocks after <span className="text-yellow-400 font-semibold">{status.cooldownDays || 4} days</span></li>
+                  <li>Timer is {EXAM_MINUTES} minutes - exam auto-submits when time runs out</li>
                   <li>Do not refresh the page during the exam</li>
                 </ul>
               </div>
 
               <div className="mb-4 text-sm text-gray-400 space-y-1">
-                <p>📌 Projects completed: {CERT_PROJECTS.join(", ")}</p>
-                <p>📌 Attempt {status.attemptsUsed + 1} of {MAX_ATTEMPTS}</p>
+                <p>Project evidence: {projectSummary}</p>
+                <p>📌 Attempt {status.attemptsUsed + 1} of {maxAttempts}</p>
               </div>
 
               {!canStart ? (
@@ -338,7 +341,7 @@ export default function CertificateExam() {
           <div className="px-6 mt-4 mb-8 flex flex-col gap-4 max-w-3xl w-full mx-auto">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <p className="text-xs text-gray-500">Question {current + 1} of {TOTAL_QUESTIONS}</p>
+                <p className="text-xs text-gray-500">Question {current + 1} of {totalQuestions}</p>
                 <p className="text-xs text-gray-500">{answered} answered</p>
               </div>
               <div className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono font-bold text-lg border ${timerWarning ? "border-red-500/40 bg-red-500/10 text-red-400" : "border-white/10 bg-[#13131f] text-purple-300"}`}>
@@ -347,7 +350,7 @@ export default function CertificateExam() {
             </div>
 
             <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-              <div className="h-full bg-purple-500 transition-all" style={{ width: `${((current + 1) / TOTAL_QUESTIONS) * 100}%` }} />
+              <div className="h-full bg-purple-500 transition-all" style={{ width: `${((current + 1) / totalQuestions) * 100}%` }} />
             </div>
 
             <div className="bg-[#13131f] rounded-2xl border border-white/5 p-6">
@@ -404,9 +407,9 @@ export default function CertificateExam() {
                 ))}
               </div>
 
-              {current < TOTAL_QUESTIONS - 1 ? (
+              {current < totalQuestions - 1 ? (
                 <button
-                  onClick={() => setCurrent((p) => Math.min(TOTAL_QUESTIONS - 1, p + 1))}
+                  onClick={() => setCurrent((p) => Math.min(totalQuestions - 1, p + 1))}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 text-sm text-gray-300 hover:bg-white/5 transition"
                 >
                   Next <ChevronRight size={16} />
@@ -422,7 +425,7 @@ export default function CertificateExam() {
               )}
             </div>
 
-            {answered === TOTAL_QUESTIONS && current !== TOTAL_QUESTIONS - 1 && (
+            {answered === totalQuestions && current !== totalQuestions - 1 && (
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
@@ -459,7 +462,7 @@ export default function CertificateExam() {
                   <p className="text-xs text-gray-500">Your score</p>
                 </div>
                 <div className="bg-[#0e0e18] rounded-xl p-4 border border-white/5">
-                  <p className="text-3xl font-bold text-purple-300">{score.correct}/{TOTAL_QUESTIONS}</p>
+                  <p className="text-3xl font-bold text-purple-300">{score.correct}/{totalQuestions}</p>
                   <p className="text-xs text-gray-500">Correct answers</p>
                 </div>
               </div>
@@ -481,7 +484,7 @@ export default function CertificateExam() {
               ) : (
                 <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-sm text-orange-300">
                   <Clock size={16} className="inline mr-2" />
-                  You have <strong>{MAX_ATTEMPTS - status.attemptsUsed} attempt(s) remaining</strong>. Next attempt unlocks in{" "}
+                  You have <strong>{maxAttempts - status.attemptsUsed} attempt(s) remaining</strong>. Next attempt unlocks in{" "}
                   <strong>{Math.ceil(status.cooldownDaysLeft)} days</strong>. Study harder and come back!
                 </div>
               )}
@@ -537,7 +540,7 @@ export default function CertificateExam() {
                 <div className="text-center mb-6">
                   <p className="text-sm text-gray-500 font-sans mb-2">This certifies that</p>
                   <p className="text-sm text-gray-500 font-sans mb-1">has successfully completed</p>
-                  <p className="text-xl font-bold text-yellow-700">{CERT_TOPIC}</p>
+                  <p className="text-xl font-bold text-yellow-700">{examTopic}</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-6 border-t border-b border-gray-200 py-4">
@@ -547,8 +550,8 @@ export default function CertificateExam() {
                   </div>
                   <div className="text-center border-x border-gray-200">
                     <p className="text-xs text-gray-400 font-sans uppercase tracking-wider mb-1">Projects Done</p>
-                    <p className="text-sm font-semibold text-gray-700">{CERT_PROJECTS.length}</p>
-                    <p className="text-xs text-gray-500">{CERT_PROJECTS.join(", ")}</p>
+                    <p className="text-sm font-semibold text-gray-700">{projectsRequired.length}</p>
+                    <p className="text-xs text-gray-500">{projectSummary}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-gray-400 font-sans uppercase tracking-wider mb-1">Issue Date</p>
@@ -581,7 +584,7 @@ export default function CertificateExam() {
               <button
                 onClick={() => {
                   if (navigator.share) {
-                    navigator.share({ title: "FocusForge Certificate", text: `I completed ${CERT_TOPIC} on FocusForge AI!` });
+                    navigator.share({ title: "FocusForge Certificate", text: `I completed ${examTopic} on FocusForge AI!` });
                   }
                 }}
                 className="flex items-center gap-2 border border-white/10 hover:bg-white/5 px-5 py-2.5 rounded-xl transition text-sm text-gray-300"
@@ -597,3 +600,6 @@ export default function CertificateExam() {
 
   return null;
 }
+
+
+
