@@ -4,6 +4,7 @@
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
 const { logActivity, getRecentActivity } = require("../utils/activityLog");
+const { CERTIFICATE_QUESTIONS } = require("../data/certificateQuestions");
 
 const XP_PER_LEVEL = 500;
 
@@ -161,9 +162,14 @@ async function buildCertificateEligibility(userId) {
   const roadmapPercent = monthItems.length
     ? Math.round((completedItems / monthItems.length) * 100)
     : 0;
-  const topic =
-    monthItems[0]?.monthLabel?.replace(/\s+Month\s+\d+.*/i, "").split(":")[0]?.trim() ||
-    monthItems[0]?.title ||
+  const availableTopics = Object.keys(CERTIFICATE_QUESTIONS);
+  const candidates = monthItems.flatMap((item) => [
+    item.monthLabel,
+    item.monthLabel?.replace(/\s+Month\s+\d+.*/i, "").split(":")[0]?.trim(),
+    item.title,
+  ]);
+  const topic = candidates.find((candidate) => candidate && CERTIFICATE_QUESTIONS[candidate]) ||
+    availableTopics[0] ||
     "Your Month 1 roadmap";
 
   const certificate = await prisma.certificate.findFirst({
