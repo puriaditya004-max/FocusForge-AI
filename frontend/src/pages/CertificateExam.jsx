@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
+import { useAuth } from "../context/AuthContext";
 import {
   Award,
   Clock,
@@ -31,6 +32,8 @@ import {
 // ---------------------------------------------------------
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const FOUNDER_NAME = import.meta.env.VITE_FOUNDER_NAME || "Aditya Puri";
+const FOUNDER_SIGNATURE_URL = import.meta.env.VITE_FOUNDER_SIGNATURE_URL || "";
 
 const DEFAULT_TOTAL_QUESTIONS = 50;
 const DEFAULT_PASS_SCORE = 97; // percent
@@ -53,6 +56,7 @@ function formatTime(totalSeconds) {
 const SCREEN = { LOADING: "loading", INTRO: "intro", EXAM: "exam", RESULT: "result", CERT: "cert", LOCKED: "locked" };
 
 export default function CertificateExam() {
+  const { user } = useAuth();
   const [screen, setScreen] = useState(SCREEN.LOADING);
   const [status, setStatus] = useState(null); // { attemptsUsed, maxAttempts, certEarned, certificate, cooldownDaysLeft, isLocked }
   const [loadError, setLoadError] = useState("");
@@ -504,6 +508,7 @@ export default function CertificateExam() {
     const issueDate = cert
       ? new Date(cert.issuedAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
       : new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+    const studentName = user?.name || "FocusForge Student";
 
     return (
       <div className="flex min-h-screen bg-[#0b0b14] text-gray-100">
@@ -539,6 +544,7 @@ export default function CertificateExam() {
 
                 <div className="text-center mb-6">
                   <p className="text-sm text-gray-500 font-sans mb-2">This certifies that</p>
+                  <p className="text-3xl font-bold text-gray-800 mb-2">{studentName}</p>
                   <p className="text-sm text-gray-500 font-sans mb-1">has successfully completed</p>
                   <p className="text-xl font-bold text-yellow-700">{examTopic}</p>
                 </div>
@@ -565,8 +571,20 @@ export default function CertificateExam() {
                     <p className="text-xs font-mono text-gray-600">{cert?.certificateCode ?? "—"}</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-20 border-t border-gray-400 mb-1" />
-                    <p className="text-xs text-gray-500 font-sans">FocusForge AI</p>
+                    {FOUNDER_SIGNATURE_URL ? (
+                      <img
+                        src={FOUNDER_SIGNATURE_URL}
+                        alt={`${FOUNDER_NAME} signature`}
+                        className="h-10 w-28 object-contain mx-auto mb-1"
+                      />
+                    ) : (
+                      <p className="text-lg font-semibold text-gray-800 mb-1" style={{ fontFamily: "cursive" }}>
+                        {FOUNDER_NAME}
+                      </p>
+                    )}
+                    <div className="w-28 border-t border-gray-400 mb-1" />
+                    <p className="text-xs text-gray-500 font-sans">{FOUNDER_NAME}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-sans">Founder</p>
                   </div>
                 </div>
               </div>
