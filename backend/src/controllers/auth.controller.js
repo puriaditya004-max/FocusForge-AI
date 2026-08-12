@@ -271,6 +271,7 @@ async function deleteAccount(req, res) {
       await tx.focusSession.deleteMany({ where: { userId } });
       await tx.userBadge.deleteMany({ where: { userId } });
       await tx.dailyChallenge.deleteMany({ where: { userId } });
+      await tx.certificateExamBank.deleteMany({ where: { userId } });
       await tx.certificate.deleteMany({ where: { userId } });
       await tx.examAttempt.deleteMany({ where: { userId } });
       await tx.penaltyEvent.deleteMany({ where: { userId } });
