@@ -1,21 +1,23 @@
 // ---------------------------------------------------------
-// certificate.controller.js — Certificate Exam attempt &
-// result tracking. Replaces the old localStorage-based
-// attempt state with real backend persistence.
+// certificate.controller.js - Certificate Exam attempt &
+// result tracking.
 //
-// Question content lives server-side only (data/certificateQuestions.js).
-// GET /questions strips the `answer` field before responding, and
-// POST /submit grades against the real question bank on the server —
-// the client only ever sends its selected option indices, never a
-// score. This is what makes the issued certificate trustworthy.
+// Certificate exams are generated from the student's completed
+// Month 1 roadmap/tasks, stored server-side with the answer key,
+// and graded on the backend. There is intentionally no generic
+// Python fallback: if a NEET Biology student completes Biology,
+// their certificate and exam must be Biology.
 // ---------------------------------------------------------
+const crypto = require("crypto");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
-const { CERTIFICATE_QUESTIONS } = require("../data/certificateQuestions");
+const { recordGeminiCall } = require("../utils/aiUsage");
 
+const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_ATTEMPTS = 2;
 const PASS_SCORE = 97;
 const COOLDOWN_DAYS = 4;
+const CERTIFICATE_QUESTION_COUNT = 50;
 
 function canBypassRoadmapGate(req) {
   return (
@@ -41,41 +43,197 @@ function generateCertCode(topic) {
 }
 
 function parseTopicFromMonthLabel(monthLabel) {
-  return String(monthLabel || "").replace(/\s+Month\s+\d+.*/i, "").split(":")[0]?.trim();
+  return String(monthLabel || "")
+    .replace(/\s+Month\s+\d+.*/i, "")
+    .split(":")[0]
+    ?.trim();
 }
 
-async function resolveCertificateContext(userId, requestedTopic) {
-  const availableTopics = Object.keys(CERTIFICATE_QUESTIONS);
-  let topic = requestedTopic && CERTIFICATE_QUESTIONS[requestedTopic] ? requestedTopic : null;
+function normalizeTitle(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+-\s+Month\s+\d+.*/i, "")
+    .replace(/\s+Month\s+\d+.*/i, "")
+    .trim();
+}
 
+function buildCertificateTitle(monthItems) {
+  const candidates = monthItems.flatMap((item) => [
+    parseTopicFromMonthLabel(item.monthLabel),
+    item.monthLabel,
+    item.title,
+  ]);
+  const base =
+    candidates
+      .map(normalizeTitle)
+      .find((candidate) => candidate && candidate.length >= 3) ||
+    "Month 1 Syllabus";
+
+  return `${base} - Month 1`;
+}
+
+function hashSyllabus(syllabus) {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(syllabus))
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function safeParseJson(raw) {
+  try {
+    const cleaned = String(raw || "")
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+function validateQuestions(parsed) {
+  const list = Array.isArray(parsed?.questions) ? parsed.questions : null;
+  if (!list || list.length < 20) return null;
+
+  const normalized = [];
+  const max = Math.min(list.length, CERTIFICATE_QUESTION_COUNT);
+
+  for (let i = 0; i < max; i++) {
+    const item = list[i];
+    const q = String(item.q || item.question || "").trim();
+    const options = Array.isArray(item.options)
+      ? item.options.map((option) => String(option || "").trim())
+      : [];
+    const answer = Number(item.answer ?? item.correctIndex);
+    const type = item.type === "project" ? "project" : "theory";
+
+    if (!q || options.length !== 4 || !Number.isInteger(answer) || answer < 0 || answer > 3) {
+      return null;
+    }
+    if (options.some((option) => !option)) return null;
+
+    normalized.push({
+      id: i + 1,
+      type,
+      q,
+      options,
+      answer,
+    });
+  }
+
+  return normalized.length >= 20 ? normalized : null;
+}
+
+async function callGeminiForCertificateExam(syllabus, topic) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY missing");
+  }
+
+  const safetySettings = [
+    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  ];
+
+  const systemPrompt = `You are FocusForge AI's Certificate Exam Generator.
+Create a trustworthy certificate exam based ONLY on the student's completed Month 1 syllabus.
+The exam must match the learner's actual domain, class, exam goal, and topics.
+Do not default to Python, coding, software, or generic study skills unless those appear in the syllabus.
+
+Return ONLY strict JSON, no markdown:
+{"questions":[{"type":"theory","q":"...","options":["A","B","C","D"],"answer":0}]}
+
+Rules:
+- Generate exactly ${CERTIFICATE_QUESTION_COUNT} MCQs.
+- Each question has exactly 4 options and exactly one answer index from 0 to 3.
+- Around 40 should test concepts; around 10 should test application/project/practice from the syllabus.
+- Difficulty should be suitable for the stated class/exam goal, for example NEET, Class 12 board, JEE, coding, or the user's requested plan.
+- Do not mention that the questions were AI-generated.
+- Do not include explanations, answers outside the answer index, or text outside JSON.`;
+
+  const userPrompt = `Certificate title: ${topic}
+
+Completed Month 1 syllabus JSON:
+${JSON.stringify(syllabus, null, 2)}`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      safetySettings,
+    }),
+  });
+
+  recordGeminiCall();
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini certificate exam error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const blockReason = data?.promptFeedback?.blockReason;
+  const finishReason = data?.candidates?.[0]?.finishReason;
+  if (blockReason || finishReason === "SAFETY") {
+    logger.warn("Gemini blocked certificate exam generation:", { blockReason, finishReason });
+    return null;
+  }
+
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  return validateQuestions(safeParseJson(raw));
+}
+
+async function resolveCertificateContext(userId) {
   const monthItems = await prisma.roadmapItem.findMany({
     where: { userId, monthNumber: 1 },
     orderBy: { weekNumber: "asc" },
   });
 
-  if (!topic && monthItems.length) {
-    const candidates = monthItems.flatMap((item) => [
-      item.monthLabel,
-      parseTopicFromMonthLabel(item.monthLabel),
-      item.title,
-    ]);
-    topic = candidates.find((candidate) => candidate && CERTIFICATE_QUESTIONS[candidate]) || null;
-  }
+  const completedTasks = await prisma.task.findMany({
+    where: { userId, monthNumber: 1, completed: true },
+    orderBy: [{ weekNumber: "asc" }, { date: "asc" }],
+    take: 80,
+  });
 
-  if (!topic) {
-    topic = availableTopics[0] || null;
-  }
-
-  const projectsRequired = monthItems
-    .map((item) => item.project)
-    .filter(Boolean);
   const completedItems = monthItems.filter((item) => item.status === "COMPLETED").length;
   const roadmapPercent = monthItems.length
     ? Math.round((completedItems / monthItems.length) * 100)
     : 0;
 
+  const topic = buildCertificateTitle(monthItems);
+  const projectsRequired = monthItems.map((item) => item.project).filter(Boolean);
+  const syllabus = {
+    certificateTitle: topic,
+    monthNumber: 1,
+    roadmap: monthItems.map((item) => ({
+      weekNumber: item.weekNumber,
+      monthLabel: item.monthLabel,
+      title: item.title,
+      description: item.description,
+      tools: item.tools,
+      hours: item.hours,
+      project: item.project,
+      status: item.status,
+    })),
+    completedTasks: completedTasks.map((task) => ({
+      weekNumber: task.weekNumber,
+      title: task.title,
+      category: task.category,
+      priority: task.priority,
+      date: task.date,
+    })),
+  };
+
   return {
     topic,
+    syllabus,
+    syllabusHash: hashSyllabus(syllabus),
     projectsRequired,
     roadmapPercent,
     roadmapComplete: monthItems.length > 0 && completedItems === monthItems.length,
@@ -83,8 +241,37 @@ async function resolveCertificateContext(userId, requestedTopic) {
   };
 }
 
-// Build the status object the frontend needs to render the
-// Intro / Locked / Certificate screens correctly.
+async function getOrCreateExamBank(context) {
+  const existing = await prisma.certificateExamBank.findFirst({
+    where: {
+      userId: context.userId,
+      topic: context.topic,
+      syllabusHash: context.syllabusHash,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (existing) return existing;
+
+  const questions = await callGeminiForCertificateExam(context.syllabus, context.topic);
+  if (!questions) {
+    return null;
+  }
+
+  return prisma.certificateExamBank.create({
+    data: {
+      userId: context.userId,
+      topic: context.topic,
+      syllabusHash: context.syllabusHash,
+      syllabus: context.syllabus,
+      questions,
+    },
+  });
+}
+
+function safeQuestions(bank) {
+  return (bank.questions || []).map(({ id, type, q, options }) => ({ id, type, q, options }));
+}
+
 async function buildStatus(userId, context) {
   const { topic } = context;
   const attempts = await prisma.examAttempt.findMany({
@@ -111,7 +298,7 @@ async function buildStatus(userId, context) {
     passScore: PASS_SCORE,
     maxAttempts: MAX_ATTEMPTS,
     cooldownDays: COOLDOWN_DAYS,
-    totalQuestions: CERTIFICATE_QUESTIONS[topic]?.length || 0,
+    totalQuestions: CERTIFICATE_QUESTION_COUNT,
     projectsRequired: context.projectsRequired,
     roadmapPercent: context.roadmapPercent,
     roadmapComplete: context.roadmapComplete,
@@ -133,20 +320,11 @@ async function buildStatus(userId, context) {
   };
 }
 
-// GET /api/certificate-exam/questions?topic=...
-// Returns the question bank for the topic with the `answer`
-// field stripped — client gets id/type/q/options only, never
-// the correct index.
 const getQuestions = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const context = await resolveCertificateContext(userId, req.query.topic);
-    const { topic } = context;
-
-    const bank = CERTIFICATE_QUESTIONS[topic];
-    if (!bank) {
-      return res.status(404).json({ message: "No question bank found for this topic" });
-    }
+    const context = await resolveCertificateContext(userId);
+    context.userId = userId;
 
     const status = await buildStatus(userId, context);
     if (!status.roadmapComplete && !canBypassRoadmapGate(req)) {
@@ -162,11 +340,17 @@ const getQuestions = async (req, res) => {
       return res.status(403).json({ message: "Certificate already earned for this topic" });
     }
 
-    const safeQuestions = bank.map(({ id, type, q, options }) => ({ id, type, q, options }));
+    const bank = await getOrCreateExamBank(context);
+    if (!bank) {
+      return res.status(502).json({
+        message: "Could not prepare a certificate exam for your completed syllabus. Please try again.",
+      });
+    }
+
     res.status(200).json({
-      topic,
-      questions: safeQuestions,
-      totalQuestions: bank.length,
+      topic: context.topic,
+      questions: safeQuestions(bank),
+      totalQuestions: bank.questions.length,
       passScore: PASS_SCORE,
       maxAttempts: MAX_ATTEMPTS,
     });
@@ -176,11 +360,10 @@ const getQuestions = async (req, res) => {
   }
 };
 
-// GET /api/certificate-exam/status?topic=...
 const getStatus = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const context = await resolveCertificateContext(userId, req.query.topic);
+    const context = await resolveCertificateContext(userId);
     const status = await buildStatus(userId, context);
     res.status(200).json(status);
   } catch (err) {
@@ -189,25 +372,16 @@ const getStatus = async (req, res) => {
   }
 };
 
-// POST /api/certificate-exam/submit
-// body: { topic, answers, projectsCompleted, startedAt }
-// `answers` is a map of { [questionId]: selectedOptionIndex } — the
-// client never tells us the score, we compute it here against the
-// real question bank so it can't be spoofed.
 const submitExam = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { topic: requestedTopic, answers, startedAt } = req.body;
-    const context = await resolveCertificateContext(userId, requestedTopic);
+    const { answers, startedAt } = req.body;
+    const context = await resolveCertificateContext(userId);
+    context.userId = userId;
     const { topic, projectsRequired } = context;
 
     if (!topic || !answers || typeof answers !== "object") {
       return res.status(400).json({ message: "answers are required" });
-    }
-
-    const bank = CERTIFICATE_QUESTIONS[topic];
-    if (!bank) {
-      return res.status(404).json({ message: "No question bank found for this topic" });
     }
 
     const status = await buildStatus(userId, context);
@@ -224,11 +398,21 @@ const submitExam = async (req, res) => {
       return res.status(403).json({ message: "Certificate already earned for this topic" });
     }
 
+    const bank = await prisma.certificateExamBank.findFirst({
+      where: { userId, topic, syllabusHash: context.syllabusHash },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!bank) {
+      return res.status(409).json({
+        message: "Certificate exam questions expired or were not prepared. Please start the exam again.",
+      });
+    }
+
     let correct = 0;
-    for (const question of bank) {
+    for (const question of bank.questions || []) {
       if (answers[question.id] === question.answer) correct++;
     }
-    const totalQuestions = bank.length;
+    const totalQuestions = bank.questions.length;
     const pct = Math.round((correct / totalQuestions) * 100);
     const passed = pct >= PASS_SCORE;
     const attemptNumber = status.attemptsUsed + 1;
