@@ -20,6 +20,28 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+function timeAgo(value) {
+  if (!value) return "Just now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Just now";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 
 export default function Rewards() {
   const navigate = useNavigate();
@@ -294,7 +316,7 @@ export default function Rewards() {
                         </div>
                         <span
                           className={`text-[10px] font-medium flex-shrink-0 ${
-                            item.xp.startsWith("-") ? "text-red-400" : "text-green-400"
+                            String(item.xp || "").startsWith("-") ? "text-red-400" : "text-green-400"
                           }`}
                         >
                           {item.xp}
@@ -430,3 +452,4 @@ export default function Rewards() {
     </div>
   );
 }
+
