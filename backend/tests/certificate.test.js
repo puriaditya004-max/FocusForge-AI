@@ -2,6 +2,13 @@ jest.mock("../src/config/db", () => ({
   roadmapItem: {
     findMany: jest.fn(),
   },
+  task: {
+    findMany: jest.fn(),
+  },
+  certificateExamBank: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+  },
   examAttempt: {
     findMany: jest.fn(),
     create: jest.fn(),
@@ -16,14 +23,13 @@ const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const app = require("../src/app");
 const prisma = require("../src/config/db");
-const { CERTIFICATE_QUESTIONS } = require("../src/data/certificateQuestions");
 
 const studentToken = jwt.sign(
   { userId: "user_1", role: "STUDENT" },
   process.env.JWT_SECRET || "test-only-secret-do-not-use-in-prod"
 );
 const authHeader = { Authorization: `Bearer ${studentToken}` };
-const topic = Object.keys(CERTIFICATE_QUESTIONS)[0];
+const topic = "NEET Biology - Month 1";
 
 function incompleteMonthRoadmap() {
   return [
@@ -31,20 +37,38 @@ function incompleteMonthRoadmap() {
       id: "roadmap_1",
       monthNumber: 1,
       weekNumber: 1,
-      monthLabel: topic,
-      title: topic,
-      project: "Build a small project",
+      monthLabel: "NEET Biology Month 1",
+      title: "Cell Structure and Genetics",
+      project: "Solve NCERT cell biology practice set",
       status: "IN_PROGRESS",
     },
   ];
+}
+
+function storedQuestions() {
+  return Array.from({ length: 20 }, (_, idx) => ({
+    id: idx + 1,
+    type: idx > 15 ? "project" : "theory",
+    q: `Biology question ${idx + 1}?`,
+    options: ["A", "B", "C", "D"],
+    answer: 0,
+  }));
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.CERTIFICATE_EXAM_TEST_BYPASS;
   prisma.roadmapItem.findMany.mockResolvedValue(incompleteMonthRoadmap());
+  prisma.task.findMany.mockResolvedValue([]);
   prisma.examAttempt.findMany.mockResolvedValue([]);
   prisma.certificate.findFirst.mockResolvedValue(null);
+  prisma.certificateExamBank.findFirst.mockResolvedValue({
+    id: "bank_1",
+    userId: "user_1",
+    topic,
+    syllabusHash: "hash_1",
+    questions: storedQuestions(),
+  });
 });
 
 describe("certificate exam roadmap gate", () => {
@@ -76,6 +100,8 @@ describe("certificate exam roadmap gate", () => {
       .set(authHeader);
 
     expect(res.status).toBe(200);
-    expect(res.body.questions.length).toBeGreaterThan(0);
+    expect(res.body.topic).toBe(topic);
+    expect(res.body.questions).toHaveLength(20);
+    expect(res.body.questions[0].answer).toBeUndefined();
   });
 });
