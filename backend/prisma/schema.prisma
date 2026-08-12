@@ -618,6 +618,7 @@ model PenaltyEvent {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId, type, sourceId])
   @@map("penalty_events")
 }
 
