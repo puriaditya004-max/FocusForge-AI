@@ -262,6 +262,7 @@ const resetProgress = async (req, res) => {
       counts.focusSessions = (await tx.focusSession.deleteMany({ where: { userId } })).count;
       counts.userBadges = (await tx.userBadge.deleteMany({ where: { userId } })).count;
       counts.dailyChallenges = (await tx.dailyChallenge.deleteMany({ where: { userId } })).count;
+      counts.certificateExamBanks = (await tx.certificateExamBank.deleteMany({ where: { userId } })).count;
       counts.penaltyEvents = (await tx.penaltyEvent.deleteMany({ where: { userId } })).count;
       counts.activityLogs = (await tx.activityLog.deleteMany({ where: { userId } })).count;
       counts.quizAttempts = (await tx.quizAttempt.deleteMany({ where: { userId } })).count;
