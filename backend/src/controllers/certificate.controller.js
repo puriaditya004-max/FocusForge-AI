@@ -17,6 +17,20 @@ const MAX_ATTEMPTS = 2;
 const PASS_SCORE = 97;
 const COOLDOWN_DAYS = 4;
 
+function canBypassRoadmapGate(req) {
+  return (
+    req.user?.role === "ADMIN" ||
+    (process.env.NODE_ENV !== "production" &&
+      process.env.CERTIFICATE_EXAM_TEST_BYPASS === "true")
+  );
+}
+
+function sendRoadmapGateError(res) {
+  return res.status(403).json({
+    message: "Complete Month 1 roadmap before starting the certificate exam",
+  });
+}
+
 function generateCertCode(topic) {
   const slug = topic
     .toUpperCase()
@@ -135,6 +149,9 @@ const getQuestions = async (req, res) => {
     }
 
     const status = await buildStatus(userId, context);
+    if (!status.roadmapComplete && !canBypassRoadmapGate(req)) {
+      return sendRoadmapGateError(res);
+    }
     if (status.isLocked) {
       return res.status(403).json({ message: "No attempts remaining for this certificate" });
     }
@@ -194,6 +211,9 @@ const submitExam = async (req, res) => {
     }
 
     const status = await buildStatus(userId, context);
+    if (!status.roadmapComplete && !canBypassRoadmapGate(req)) {
+      return sendRoadmapGateError(res);
+    }
     if (status.isLocked) {
       return res.status(403).json({ message: "No attempts remaining for this certificate" });
     }
