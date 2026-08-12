@@ -33,7 +33,7 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const FOUNDER_NAME = import.meta.env.VITE_FOUNDER_NAME || "Aditya Puri";
-const FOUNDER_SIGNATURE_URL = import.meta.env.VITE_FOUNDER_SIGNATURE_URL || "";
+const FOUNDER_SIGNATURE_URL = import.meta.env.VITE_FOUNDER_SIGNATURE_URL || "/signature-bg-removed.png";
 
 const DEFAULT_TOTAL_QUESTIONS = 50;
 const DEFAULT_PASS_SCORE = 97; // percent
