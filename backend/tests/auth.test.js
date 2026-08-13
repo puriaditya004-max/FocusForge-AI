@@ -17,6 +17,10 @@ jest.mock("../src/config/db", () => ({
     create: jest.fn(),
     update: jest.fn(),
   },
+  digitalId: {
+    findUnique: jest.fn(),
+    create: jest.fn(),
+  },
   otpChallenge: {
     updateMany: jest.fn(),
     create: jest.fn(),
@@ -65,7 +69,6 @@ describe("POST /api/auth/signup", () => {
     const res = await request(app).post("/api/auth/signup").send({
       name: "Aditya",
       email: "aditya@example.com",
-      password: VALID_PASSWORD,
     });
 
     expect(res.status).toBe(201);
@@ -82,7 +85,17 @@ describe("POST /api/auth/signup", () => {
     const res = await request(app).post("/api/auth/signup").send({
       name: "Aditya",
       email: "weakpass@example.com",
-      password: "12345", // too short, no letter, no special char
+      password: "12345", // ignored by the new email-first signup contract
+    });
+
+    expect(res.status).toBe(201);
+    expect(prisma.user.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a malformed signup email before it reaches the database", async () => {
+    const res = await request(app).post("/api/auth/signup").send({
+      name: "Aditya",
+      email: "not-an-email",
     });
 
     expect(res.status).toBe(400);
@@ -104,19 +117,23 @@ describe("POST /api/auth/signup", () => {
 });
 
 describe("POST /api/auth/login", () => {
-  it("logs in successfully with the correct password", async () => {
+  it("logs in successfully with the correct Digital ID and password", async () => {
     const passwordHash = await bcrypt.hash(VALID_PASSWORD, 12);
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user_2",
-      name: "Aditya",
-      email: "login@example.com",
-      role: "STUDENT",
-      emailVerifiedAt: new Date(),
-      passwordHash,
+    prisma.digitalId.findUnique.mockResolvedValue({
+      cardNumber: "FF-STU-LOGIN123",
+      user: {
+        id: "user_2",
+        name: "Aditya",
+        email: "login@example.com",
+        role: "STUDENT",
+        emailVerifiedAt: new Date(),
+        onboardingCompletedAt: new Date(),
+        passwordHash,
+      },
     });
 
     const res = await request(app).post("/api/auth/login").send({
-      email: "login@example.com",
+      identifier: "FF-STU-LOGIN123",
       password: VALID_PASSWORD,
     });
 
@@ -127,19 +144,21 @@ describe("POST /api/auth/login", () => {
 
   it("requires email verification before creating a session", async () => {
     const passwordHash = await bcrypt.hash(VALID_PASSWORD, 12);
+    prisma.digitalId.findUnique.mockResolvedValue(null);
     prisma.user.findUnique.mockResolvedValue({
       id: "user_unverified",
       name: "Aditya",
       email: "verify@example.com",
       role: "STUDENT",
       emailVerifiedAt: null,
+      onboardingCompletedAt: null,
       passwordHash,
     });
     prisma.otpChallenge.updateMany.mockResolvedValue({ count: 0 });
     prisma.otpChallenge.create.mockResolvedValue({ id: "otp_login" });
 
     const res = await request(app).post("/api/auth/login").send({
-      email: "verify@example.com",
+      identifier: "verify@example.com",
       password: VALID_PASSWORD,
     });
 
@@ -151,31 +170,89 @@ describe("POST /api/auth/login", () => {
 
   it("rejects an incorrect password with a generic message", async () => {
     const passwordHash = await bcrypt.hash(VALID_PASSWORD, 12);
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user_3",
-      email: "wrongpass@example.com",
-      passwordHash,
+    prisma.digitalId.findUnique.mockResolvedValue({
+      cardNumber: "FF-STU-WRONG123",
+      user: {
+        id: "user_3",
+        email: "wrongpass@example.com",
+        role: "STUDENT",
+        emailVerifiedAt: new Date(),
+        onboardingCompletedAt: new Date(),
+        passwordHash,
+      },
     });
 
     const res = await request(app).post("/api/auth/login").send({
-      email: "wrongpass@example.com",
+      identifier: "FF-STU-WRONG123",
       password: "TotallyWrong1!",
     });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/invalid email or password/i);
+    expect(res.body.error).toMatch(/invalid digital id or password/i);
   });
 
   it("does not reveal whether the email exists when the user is not found", async () => {
+    prisma.digitalId.findUnique.mockResolvedValue(null);
     prisma.user.findUnique.mockResolvedValue(null);
 
     const res = await request(app).post("/api/auth/login").send({
-      email: "doesnotexist@example.com",
+      identifier: "FF-STU-NOTREAL",
       password: VALID_PASSWORD,
     });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toMatch(/invalid email or password/i);
+    expect(res.body.error).toMatch(/invalid digital id or password/i);
+  });
+});
+
+describe("POST /api/auth/onboarding/complete", () => {
+  it("sets student profile, password, and issues a Digital ID", async () => {
+    const jwt = require("jsonwebtoken");
+    const token = jwt.sign({ userId: "student_1", role: "STUDENT" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "student_1",
+      name: "Aditya",
+      email: "aditya@example.com",
+      role: "STUDENT",
+      emailVerifiedAt: new Date(),
+      onboardingCompletedAt: null,
+      passwordHash: "old-hash",
+      digitalId: null,
+    });
+    prisma.user.update.mockResolvedValue({
+      id: "student_1",
+      name: "Aditya",
+      email: "aditya@example.com",
+      role: "STUDENT",
+      emailVerifiedAt: new Date(),
+      onboardingCompletedAt: new Date(),
+      passwordHash: "new-hash",
+      preparationTrack: "JEE",
+      digitalId: null,
+    });
+    prisma.digitalId.findUnique.mockResolvedValue(null);
+    prisma.digitalId.create.mockResolvedValue({
+      id: "card_1",
+      cardNumber: "FF-STU-ABC12345",
+      verifyToken: "verify_token",
+      status: "ACTIVE",
+    });
+
+    const res = await request(app)
+      .post("/api/auth/onboarding/complete")
+      .set("Cookie", [`token=${token}`])
+      .send({
+        preparationTrack: "JEE",
+        dateOfBirth: "2005-01-01",
+        password: VALID_PASSWORD,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.digitalId.cardNumber).toBe("FF-STU-ABC12345");
+    expect(res.body.user.passwordHash).toBeUndefined();
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.digitalId.create).toHaveBeenCalledTimes(1);
   });
 });
 

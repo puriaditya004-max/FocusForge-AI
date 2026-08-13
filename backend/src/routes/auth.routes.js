@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   signup,
   login,
+  completeOnboarding,
   verifyEmail,
   resendEmailVerification,
   requestPasswordReset,
@@ -19,6 +20,7 @@ const validate = require("../middleware/validate.middleware");
 const {
   signupSchema,
   loginSchema,
+  completeOnboardingSchema,
   verifyEmailSchema,
   resendEmailVerificationSchema,
   requestPasswordResetSchema,
@@ -30,6 +32,7 @@ const {
 
 router.post("/signup", authLimiter, validate(signupSchema), signup);
 router.post("/login", authLimiter, validate(loginSchema), login);
+router.post("/onboarding/complete", requireAuth, authLimiter, validate(completeOnboardingSchema), completeOnboarding);
 router.post("/email/verify", authLimiter, validate(verifyEmailSchema), verifyEmail);
 router.post("/email/resend", authLimiter, validate(resendEmailVerificationSchema), resendEmailVerification);
 router.post("/forgot-password/request", authLimiter, validate(requestPasswordResetSchema), requestPasswordReset);

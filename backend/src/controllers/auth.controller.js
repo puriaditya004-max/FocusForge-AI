@@ -1,4 +1,5 @@
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/db");
 const logger = require("../utils/logger");
@@ -159,6 +160,39 @@ function setAuthCookie(res, user) {
   res.cookie("token", signToken(user), COOKIE_OPTIONS);
 }
 
+function generateCardNumber(role) {
+  const prefix = role === "TEACHER" ? "TCH" : role === "PARENT" ? "PAR" : "STU";
+  const random = crypto.randomBytes(5).toString("hex").toUpperCase().slice(0, 8);
+  return `FF-${prefix}-${random}`;
+}
+
+function generateVerifyToken() {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
+async function issueDigitalIdForUser(userId, role) {
+  const existing = await prisma.digitalId.findUnique({ where: { userId } });
+  if (existing) return existing;
+
+  let attempts = 0;
+  while (attempts < 5) {
+    attempts++;
+    try {
+      return await prisma.digitalId.create({
+        data: {
+          userId,
+          cardNumber: generateCardNumber(role),
+          verifyToken: generateVerifyToken(),
+        },
+      });
+    } catch (err) {
+      if (err.code === "P2002" && attempts < 5) continue;
+      throw err;
+    }
+  }
+  throw new Error("Failed to issue Digital ID.");
+}
+
 async function sendAccountVerification(user) {
   const result = await createOtpChallenge({
     user,
@@ -176,7 +210,7 @@ async function sendAccountVerification(user) {
 
 async function signup(req, res) {
   try {
-    const { name, email, password, role, dateOfBirth, mobileNumber } = req.body;
+    const { name, email, role } = req.body;
     const safeRole = VALID_ROLES.includes(role) ? role : "STUDENT";
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -184,15 +218,13 @@ async function signup(req, res) {
       return res.status(409).json({ error: "This email can't be used to create an account." });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
     const user = await prisma.user.create({
       data: {
         name,
         email,
         passwordHash,
         role: safeRole,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        mobileNumber: mobileNumber || null,
       },
     });
 
@@ -215,9 +247,28 @@ async function signup(req, res) {
 
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
-    const genericError = () => res.status(401).json({ error: "Invalid email or password." });
+    const { identifier, password } = req.body;
+    const normalizedIdentifier = String(identifier || "").trim();
+    const genericError = () => res.status(401).json({ error: "Invalid Digital ID or password." });
+
+    let user = null;
+    const card = await prisma.digitalId.findUnique({
+      where: { cardNumber: normalizedIdentifier.toUpperCase() },
+      include: { user: { include: { digitalId: true } } },
+    });
+
+    if (card?.user) {
+      user = card.user;
+    } else if (normalizedIdentifier.includes("@")) {
+      const emailUser = await prisma.user.findUnique({
+        where: { email: normalizeEmail(normalizedIdentifier) },
+        include: { digitalId: true },
+      });
+
+      if (emailUser && (emailUser.role !== "STUDENT" || !emailUser.onboardingCompletedAt)) {
+        user = emailUser;
+      }
+    }
 
     if (!user) return genericError();
 
@@ -235,6 +286,15 @@ async function login(req, res) {
       });
     }
 
+    if (user.role === "STUDENT" && !user.onboardingCompletedAt) {
+      setAuthCookie(res, user);
+      return res.status(403).json({
+        code: "ONBOARDING_REQUIRED",
+        message: "Complete onboarding to receive your Digital ID.",
+        user: toSafeUser(user),
+      });
+    }
+
     setAuthCookie(res, user);
     return res.json({ user: toSafeUser(user) });
   } catch (err) {
@@ -242,6 +302,53 @@ async function login(req, res) {
     return res.status(err.status || 500).json({
       error: err.status === 503 ? err.message : "Something went wrong while logging in.",
     });
+  }
+}
+
+async function completeOnboarding(req, res) {
+  try {
+    const userId = req.user.userId;
+    const { preparationTrack, preparationOther, dateOfBirth, avatarUrl, password } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { digitalId: true },
+    });
+    if (!user) return res.status(404).json({ error: "User not found." });
+    if (user.role !== "STUDENT") {
+      return res.status(403).json({ error: "Student onboarding is only available for student accounts." });
+    }
+    if (!user.emailVerifiedAt) {
+      return res.status(403).json({ code: "EMAIL_VERIFICATION_REQUIRED", error: "Verify your email before onboarding." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const now = new Date();
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        dateOfBirth: new Date(dateOfBirth),
+        avatarUrl: avatarUrl || null,
+        preparationTrack,
+        preparationOther: preparationTrack === "OTHER" ? preparationOther : null,
+        onboardingCompletedAt: user.onboardingCompletedAt || now,
+      },
+      include: { digitalId: true },
+    });
+
+    const digitalId = await issueDigitalIdForUser(updated.id, updated.role);
+    const finalUser = { ...updated, digitalId };
+    setAuthCookie(res, finalUser);
+
+    return res.json({
+      message: "Onboarding complete. Your Digital ID is ready.",
+      user: toSafeUser(finalUser),
+      digitalId,
+    });
+  } catch (err) {
+    logger.error("completeOnboarding error:", err);
+    return res.status(err.status || 500).json({ error: err.message || "Failed to complete onboarding." });
   }
 }
 
@@ -376,7 +483,10 @@ async function logout(req, res) {
 
 async function me(req, res) {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      include: { digitalId: true },
+    });
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
@@ -532,6 +642,7 @@ async function deleteAccount(req, res) {
 module.exports = {
   signup,
   login,
+  completeOnboarding,
   verifyEmail,
   resendEmailVerification,
   requestPasswordReset,

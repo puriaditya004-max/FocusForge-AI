@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Mail, Lock, Eye, EyeOff, LogIn, ShieldCheck, RotateCcw } from "lucide-react";
+import { BadgeCheck, Mail, Lock, Eye, EyeOff, LogIn, ShieldCheck, RotateCcw } from "lucide-react";
 
 const ROLE_HOME = {
   STUDENT: "/dashboard",
@@ -10,7 +10,8 @@ const ROLE_HOME = {
 };
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -41,19 +42,24 @@ export default function Login() {
     setError("");
     setNotice("");
 
-    if (!email || !password) {
-      setError("Please enter both email and password.");
+    if (!identifier || !password) {
+      setError("Please enter your Digital ID and password.");
       return;
     }
 
     setLoading(true);
     try {
-      const data = await login(email, password);
+      const data = await login(identifier, password);
       if (data.code === "EMAIL_VERIFICATION_REQUIRED") {
         setVerificationToken(data.verificationToken);
+        setRecoveryEmail(data.email || identifier);
         setMode("VERIFY_EMAIL");
         setCooldown(30);
         setNotice(data.devCode ? `OTP sent. Dev code: ${data.devCode}` : "OTP sent to your email.");
+        return;
+      }
+      if (data.code === "ONBOARDING_REQUIRED") {
+        navigate("/signup");
         return;
       }
       goHome(data.user);
@@ -105,14 +111,14 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setNotice("");
-    if (!email) {
+    if (!recoveryEmail) {
       setError("Enter your email first.");
       return;
     }
 
     setLoading(true);
     try {
-      const data = await requestPasswordReset(email);
+      const data = await requestPasswordReset(recoveryEmail);
       setMode("RESET_PASSWORD");
       setNotice(data.message || "If this email exists, a reset OTP has been sent.");
     } catch (err) {
@@ -133,7 +139,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const data = await resetPassword(email, resetCode, newPassword);
+      const data = await resetPassword(recoveryEmail, resetCode, newPassword);
       setMode("LOGIN");
       setPassword("");
       setResetCode("");
@@ -166,7 +172,7 @@ export default function Login() {
               ? "Enter the OTP sent to your email."
               : mode === "RESET_PASSWORD"
                 ? "Enter the reset OTP and your new password."
-                : "Log in to continue your journey."}
+                : "Use your FocusForge Digital ID after onboarding is complete."}
           </p>
 
           {notice && (
@@ -182,7 +188,7 @@ export default function Login() {
 
           {mode === "LOGIN" && (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <EmailInput email={email} setEmail={setEmail} />
+              <DigitalIdInput identifier={identifier} setIdentifier={setIdentifier} />
               <PasswordInput
                 label="Password"
                 password={password}
@@ -193,6 +199,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => {
+                  setRecoveryEmail(identifier.includes("@") ? identifier : "");
                   setMode("REQUEST_RESET");
                   setError("");
                   setNotice("");
@@ -213,7 +220,7 @@ export default function Login() {
 
           {mode === "VERIFY_EMAIL" && (
             <form onSubmit={handleVerifyEmail} className="flex flex-col gap-4">
-              <EmailInput email={email} setEmail={setEmail} disabled />
+              <EmailInput email={recoveryEmail} setEmail={setRecoveryEmail} disabled />
               <input
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -241,7 +248,7 @@ export default function Login() {
 
           {mode === "REQUEST_RESET" && (
             <form onSubmit={handleRequestReset} className="flex flex-col gap-4">
-              <EmailInput email={email} setEmail={setEmail} />
+              <EmailInput email={recoveryEmail} setEmail={setRecoveryEmail} />
               <button
                 type="submit"
                 disabled={loading}
@@ -257,7 +264,7 @@ export default function Login() {
 
           {mode === "RESET_PASSWORD" && (
             <form onSubmit={handleResetPassword} className="flex flex-col gap-4">
-              <EmailInput email={email} setEmail={setEmail} disabled />
+              <EmailInput email={recoveryEmail} setEmail={setRecoveryEmail} disabled />
               <input
                 value={resetCode}
                 onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -309,6 +316,25 @@ function EmailInput({ email, setEmail, disabled = false }) {
           className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-gray-100 disabled:opacity-70 focus:outline-none focus:border-purple-500/50"
         />
       </div>
+    </div>
+  );
+}
+
+function DigitalIdInput({ identifier, setIdentifier }) {
+  return (
+    <div>
+      <label className="text-[11px] text-gray-500 mb-1 block">Digital ID</label>
+      <div className="relative">
+        <BadgeCheck size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          type="text"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
+          placeholder="FF-STU-8K3F9QRT"
+          className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-gray-100 font-mono focus:outline-none focus:border-purple-500/50"
+        />
+      </div>
+      <p className="mt-1 text-[11px] text-gray-500">New students receive this ID after email verification and onboarding.</p>
     </div>
   );
 }
