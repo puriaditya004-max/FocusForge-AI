@@ -59,6 +59,25 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required."),
 });
 
+const verifyEmailSchema = z.object({
+  verificationToken: z.string().trim().min(20, "Verification session is required."),
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit OTP."),
+});
+
+const resendEmailVerificationSchema = z.object({
+  verificationToken: z.string().trim().min(20, "Verification session is required."),
+});
+
+const requestPasswordResetSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Please enter a valid email address."),
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Please enter a valid email address."),
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit OTP."),
+  password: passwordRule,
+});
+
 const requestOtpSchema = z.object({
   channel: z.enum(["EMAIL", "MOBILE"]),
   target: z.string().trim().min(3).max(120).optional(),
@@ -78,4 +97,14 @@ const deleteAccountSchema = z.object({
     .refine((value) => value === "DELETE", 'Type "DELETE" to confirm.'),
 });
 
-module.exports = { signupSchema, loginSchema, requestOtpSchema, verifyOtpSchema, deleteAccountSchema };
+module.exports = {
+  signupSchema,
+  loginSchema,
+  verifyEmailSchema,
+  resendEmailVerificationSchema,
+  requestPasswordResetSchema,
+  resetPasswordSchema,
+  requestOtpSchema,
+  verifyOtpSchema,
+  deleteAccountSchema,
+};

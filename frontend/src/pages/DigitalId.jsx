@@ -266,8 +266,9 @@ export default function DigitalId() {
                 <input
                   value={verifyTarget}
                   onChange={(e) => setVerifyTarget(e.target.value)}
+                  disabled={verifyChannel === "EMAIL"}
                   placeholder={verifyChannel === "EMAIL" ? "Email address" : "Mobile number with country code"}
-                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-gray-100 outline-none focus:border-purple-500/50"
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-gray-100 outline-none disabled:opacity-70 focus:border-purple-500/50"
                 />
                 <button
                   onClick={requestOtp}

@@ -15,7 +15,24 @@ jest.mock("../src/config/db", () => ({
   user: {
     findUnique: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
   },
+  otpChallenge: {
+    updateMany: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+  },
+  $transaction: jest.fn((operations) => Promise.all(operations)),
+}));
+
+jest.mock("../src/utils/otp", () => ({
+  OTP_TTL_MS: 10 * 60 * 1000,
+  generateOtp: jest.fn(() => "123456"),
+  hashOtp: jest.fn((code) => `hash:${code}`),
+  verifyOtpHash: jest.fn((code, hash) => hash === `hash:${code}`),
+  deliverOtp: jest.fn().mockResolvedValue(undefined),
 }));
 
 const request = require("supertest");
@@ -32,15 +49,18 @@ beforeEach(() => {
 });
 
 describe("POST /api/auth/signup", () => {
-  it("creates a new user and returns it without the password hash", async () => {
+  it("creates an unverified user and sends an email OTP without setting a session", async () => {
     prisma.user.findUnique.mockResolvedValue(null); // no existing user with this email
     prisma.user.create.mockResolvedValue({
       id: "user_1",
       name: "Aditya",
       email: "aditya@example.com",
       role: "STUDENT",
+      emailVerifiedAt: null,
       passwordHash: "should-never-appear-in-response",
     });
+    prisma.otpChallenge.updateMany.mockResolvedValue({ count: 0 });
+    prisma.otpChallenge.create.mockResolvedValue({ id: "otp_1" });
 
     const res = await request(app).post("/api/auth/signup").send({
       name: "Aditya",
@@ -49,9 +69,13 @@ describe("POST /api/auth/signup", () => {
     });
 
     expect(res.status).toBe(201);
+    expect(res.body.code).toBe("EMAIL_VERIFICATION_SENT");
+    expect(res.body.verificationToken).toBeDefined();
     expect(res.body.user.email).toBe("aditya@example.com");
     expect(res.body.user.passwordHash).toBeUndefined(); // must never leak the hash
+    expect(res.headers["set-cookie"]).toBeUndefined(); // no session until email is verified
     expect(prisma.user.create).toHaveBeenCalledTimes(1);
+    expect(prisma.otpChallenge.create).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a weak password before it ever reaches the database", async () => {
@@ -87,6 +111,7 @@ describe("POST /api/auth/login", () => {
       name: "Aditya",
       email: "login@example.com",
       role: "STUDENT",
+      emailVerifiedAt: new Date(),
       passwordHash,
     });
 
@@ -98,6 +123,30 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(200);
     expect(res.body.user.email).toBe("login@example.com");
     expect(res.headers["set-cookie"]).toBeDefined(); // auth cookie should be set
+  });
+
+  it("requires email verification before creating a session", async () => {
+    const passwordHash = await bcrypt.hash(VALID_PASSWORD, 12);
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user_unverified",
+      name: "Aditya",
+      email: "verify@example.com",
+      role: "STUDENT",
+      emailVerifiedAt: null,
+      passwordHash,
+    });
+    prisma.otpChallenge.updateMany.mockResolvedValue({ count: 0 });
+    prisma.otpChallenge.create.mockResolvedValue({ id: "otp_login" });
+
+    const res = await request(app).post("/api/auth/login").send({
+      email: "verify@example.com",
+      password: VALID_PASSWORD,
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("EMAIL_VERIFICATION_REQUIRED");
+    expect(res.body.verificationToken).toBeDefined();
+    expect(res.headers["set-cookie"]).toBeUndefined();
   });
 
   it("rejects an incorrect password with a generic message", async () => {
@@ -134,5 +183,54 @@ describe("GET /api/auth/me", () => {
   it("rejects the request when there is no auth cookie or token", async () => {
     const res = await request(app).get("/api/auth/me");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/auth/email/verify", () => {
+  it("verifies a valid email OTP and then sets the auth cookie", async () => {
+    const jwt = require("jsonwebtoken");
+    const verificationToken = jwt.sign(
+      {
+        userId: "user_verify",
+        email: "verify@example.com",
+        purpose: "VERIFY_ACCOUNT",
+        type: "email_verification",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user_verify",
+      name: "Aditya",
+      email: "verify@example.com",
+      role: "STUDENT",
+      emailVerifiedAt: null,
+      passwordHash: "hidden",
+    });
+    prisma.otpChallenge.findFirst.mockResolvedValue({
+      id: "otp_verify",
+      attempts: 0,
+      maxAttempts: 5,
+      codeHash: "hash:123456",
+    });
+    prisma.user.update.mockResolvedValue({
+      id: "user_verify",
+      name: "Aditya",
+      email: "verify@example.com",
+      role: "STUDENT",
+      emailVerifiedAt: new Date(),
+      passwordHash: "hidden",
+    });
+    prisma.otpChallenge.update.mockResolvedValue({ id: "otp_verify" });
+
+    const res = await request(app).post("/api/auth/email/verify").send({
+      verificationToken,
+      code: "123456",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.emailVerifiedAt).toBeDefined();
+    expect(res.headers["set-cookie"]).toBeDefined();
   });
 });

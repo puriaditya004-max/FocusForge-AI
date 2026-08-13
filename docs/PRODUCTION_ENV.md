@@ -40,16 +40,16 @@ Payments and subscriptions:
 
 OTP delivery:
 
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `EMAIL_FROM`
+- `OTP_EMAIL_PROVIDER=msg91`
 - `OTP_SMS_PROVIDER`
 - `MSG91_AUTH_KEY`
+- `MSG91_EMAIL_TEMPLATE_ID`
+- `MSG91_EMAIL_FROM`
+- `MSG91_EMAIL_DOMAIN`
 - `MSG91_OTP_TEMPLATE_ID`
 - `SMS_OTP_WEBHOOK_URL`
-- `EMAIL_OTP_WEBHOOK_URL`
+
+`MSG91_EMAIL_TEMPLATE_ID` is for email OTP only. `MSG91_OTP_TEMPLATE_ID` is for SMS OTP only.
 
 Optional SMS provider:
 
@@ -90,7 +90,7 @@ Required:
 - Use Razorpay test keys only in staging.
 - Use a separate Sentry project for staging if staging is created.
 - The backend now fails fast in production if `DATABASE_URL` or `JWT_SECRET` is missing.
-- Important provider groups such as frontend origins, encryption, Gemini, Razorpay, SMTP, and MSG91 log clear warnings when incomplete, without printing secret values.
+- Important provider groups such as frontend origins, encryption, Gemini, Razorpay, MSG91 Email, and MSG91 SMS log clear warnings when incomplete, without printing secret values.
 - Backend logs redact secret-like keys before writing to console or log files.
 
 ## Panel Audit Notes

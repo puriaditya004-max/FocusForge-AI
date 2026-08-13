@@ -53,9 +53,11 @@ export function AuthProvider({ children }) {
     if (!res.ok) {
       throw new Error(data.error || "Signup failed. Please try again.");
     }
-    setUser(data.user);
-    applyTheme(data.user?.theme);
-    return data.user;
+    if (data.user && !data.verificationToken) {
+      setUser(data.user);
+      applyTheme(data.user?.theme);
+    }
+    return data;
   }
 
   async function login(email, password) {
@@ -66,12 +68,73 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password }),
     });
     const data = await res.json();
+    if (res.status === 403 && data.code === "EMAIL_VERIFICATION_REQUIRED") {
+      return data;
+    }
     if (!res.ok) {
       throw new Error(data.error || "Login failed. Please try again.");
     }
     setUser(data.user);
     applyTheme(data.user?.theme);
-    return data.user;
+    return data;
+  }
+
+  async function verifyEmail(verificationToken, code) {
+    const res = await fetch(`${API_BASE}/auth/email/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ verificationToken, code }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Email verification failed.");
+    }
+    setUser(data.user);
+    applyTheme(data.user?.theme);
+    return data;
+  }
+
+  async function resendEmailVerification(verificationToken) {
+    const res = await fetch(`${API_BASE}/auth/email/resend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ verificationToken }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Could not resend OTP.");
+    }
+    return data;
+  }
+
+  async function requestPasswordReset(email) {
+    const res = await fetch(`${API_BASE}/auth/forgot-password/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Could not send reset OTP.");
+    }
+    return data;
+  }
+
+  async function resetPassword(email, code, password) {
+    const res = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, code, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Could not reset password.");
+    }
+    return data;
   }
 
   async function logout() {
@@ -103,6 +166,10 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     signup,
     login,
+    verifyEmail,
+    resendEmailVerification,
+    requestPasswordReset,
+    resetPassword,
     logout,
     deleteAccount,
   };
