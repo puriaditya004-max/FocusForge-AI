@@ -4,6 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./context/ProtectedRoute";
 
 import HeyForgeWidget from "./components/HeyForgeWidget";
+import FocusForgeLoader from "./components/FocusForgeLoader";
 import PremiumGate from "./components/PremiumGate";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -34,11 +35,7 @@ const VerifyId = lazy(() => import("./pages/VerifyId"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 
 function PageLoader() {
-  return (
-    <div className="min-h-screen bg-[#0b0b14] text-gray-300 flex items-center justify-center">
-      <div className="h-8 w-8 rounded-full border-2 border-purple-400/30 border-t-purple-400 animate-spin" />
-    </div>
-  );
+  return <FocusForgeLoader message="Loading your FocusForge space" />;
 }
 
 export default function App() {
