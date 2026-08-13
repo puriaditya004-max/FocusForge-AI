@@ -61,6 +61,7 @@ describe("GET /api/digital-id/me", () => {
       dateOfBirth: null,
       emailVerifiedAt: new Date(),
       mobileVerifiedAt: null,
+      onboardingCompletedAt: new Date(),
     });
     prisma.digitalId.findUnique.mockResolvedValue(null);
     prisma.digitalId.create.mockResolvedValue({
@@ -87,6 +88,7 @@ describe("GET /api/digital-id/me", () => {
       dateOfBirth: null,
       emailVerifiedAt: new Date(),
       mobileVerifiedAt: null,
+      onboardingCompletedAt: new Date(),
     });
     prisma.digitalId.findUnique.mockResolvedValue({
       cardNumber: "FF-STU-EXISTING1",
@@ -101,6 +103,23 @@ describe("GET /api/digital-id/me", () => {
     expect(res.status).toBe(200);
     expect(prisma.digitalId.create).not.toHaveBeenCalled();
     expect(res.body.card.cardNumber).toBe("FF-STU-EXISTING1");
+  });
+
+  it("requires student onboarding before issuing a card", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user_1",
+      role: "STUDENT",
+      name: "Test Student",
+      emailVerifiedAt: new Date(),
+      mobileVerifiedAt: null,
+      onboardingCompletedAt: null,
+    });
+
+    const res = await request(app).get("/api/digital-id/me").set(authHeader);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("ONBOARDING_REQUIRED");
+    expect(prisma.digitalId.create).not.toHaveBeenCalled();
   });
 });
 

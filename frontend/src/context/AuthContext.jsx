@@ -42,12 +42,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function signup(name, email, password, role = "STUDENT", dateOfBirth = null, mobileNumber = "") {
+  async function signup(name, email, role = "STUDENT") {
     const res = await fetch(`${API_BASE}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, email, password, role, dateOfBirth, mobileNumber }),
+      body: JSON.stringify({ name, email, role }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -60,19 +60,39 @@ export function AuthProvider({ children }) {
     return data;
   }
 
-  async function login(email, password) {
+  async function login(identifier, password) {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     });
     const data = await res.json();
-    if (res.status === 403 && data.code === "EMAIL_VERIFICATION_REQUIRED") {
+    if (res.status === 403 && (data.code === "EMAIL_VERIFICATION_REQUIRED" || data.code === "ONBOARDING_REQUIRED")) {
+      if (data.user) {
+        setUser(data.user);
+        applyTheme(data.user?.theme);
+      }
       return data;
     }
     if (!res.ok) {
       throw new Error(data.error || "Login failed. Please try again.");
+    }
+    setUser(data.user);
+    applyTheme(data.user?.theme);
+    return data;
+  }
+
+  async function completeOnboarding(payload) {
+    const res = await fetch(`${API_BASE}/auth/onboarding/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Could not complete onboarding.");
     }
     setUser(data.user);
     applyTheme(data.user?.theme);
@@ -166,6 +186,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     signup,
     login,
+    completeOnboarding,
     verifyEmail,
     resendEmailVerification,
     requestPasswordReset,

@@ -35,6 +35,10 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
+  if (user?.role === "STUDENT" && !user?.onboardingCompletedAt) {
+    return <Navigate to="/signup" replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user?.role)) {
     return <Navigate to={ROLE_HOME[user?.role] || "/dashboard"} replace />;
   }

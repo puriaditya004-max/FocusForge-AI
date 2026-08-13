@@ -11,6 +11,18 @@
 const { z } = require("zod");
 
 const VALID_ROLES = ["STUDENT", "PARENT", "TEACHER"];
+const VALID_PREPARATION_TRACKS = [
+  "CLASS_10",
+  "CLASS_12",
+  "NEET",
+  "JEE",
+  "UPSC",
+  "MPSC",
+  "MEDICAL",
+  "ENGINEERING",
+  "LLB",
+  "OTHER",
+];
 
 const passwordRule = z
   .string()
@@ -48,16 +60,36 @@ const signupSchema = z.object({
     .toLowerCase()
     .email("Please enter a valid email address.")
     .max(120, "Email is too long."),
-  password: passwordRule,
   role: z.enum(VALID_ROLES).optional(),
-  dateOfBirth: dateOfBirthRule,
-  mobileNumber: z.string().trim().min(7).max(20).optional(),
 });
 
-const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Please enter a valid email address."),
-  password: z.string().min(1, "Password is required."),
-});
+const loginSchema = z
+  .object({
+    identifier: z.string().trim().max(120, "Digital ID is too long.").optional(),
+    email: z.string().trim().toLowerCase().email("Please enter a valid email address.").optional(),
+    password: z.string().min(1, "Password is required."),
+  })
+  .transform((data) => ({
+    identifier: data.identifier || data.email || "",
+    password: data.password,
+  }))
+  .refine((data) => data.identifier.length >= 3, {
+    path: ["identifier"],
+    message: "Digital ID is required.",
+  });
+
+const completeOnboardingSchema = z
+  .object({
+    preparationTrack: z.enum(VALID_PREPARATION_TRACKS),
+    preparationOther: z.string().trim().max(80, "Preparation detail is too long.").optional(),
+    dateOfBirth: dateOfBirthRule.refine(Boolean, "Date of birth is required."),
+    avatarUrl: z.string().trim().url("Photo URL must be valid.").max(500).optional().or(z.literal("")),
+    password: passwordRule,
+  })
+  .refine((data) => data.preparationTrack !== "OTHER" || !!data.preparationOther, {
+    path: ["preparationOther"],
+    message: "Please enter your preparation goal.",
+  });
 
 const verifyEmailSchema = z.object({
   verificationToken: z.string().trim().min(20, "Verification session is required."),
@@ -100,6 +132,7 @@ const deleteAccountSchema = z.object({
 module.exports = {
   signupSchema,
   loginSchema,
+  completeOnboardingSchema,
   verifyEmailSchema,
   resendEmailVerificationSchema,
   requestPasswordResetSchema,

@@ -46,6 +46,9 @@ model User {
   mobileVerifiedAt DateTime?
 
   dateOfBirth   DateTime?
+  preparationTrack String?
+  preparationOther String?
+  onboardingCompletedAt DateTime?
 
   // Gamification (Rewards page)
   level         Int      @default(1)

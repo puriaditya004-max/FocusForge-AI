@@ -51,6 +51,13 @@ const getMyCard = async (req, res) => {
       });
     }
 
+    if (user.role === "STUDENT" && !user.onboardingCompletedAt) {
+      return res.status(403).json({
+        error: "Complete onboarding before your Digital ID can be issued.",
+        code: "ONBOARDING_REQUIRED",
+      });
+    }
+
     let card = await prisma.digitalId.findUnique({ where: { userId } });
 
     if (!card) {
