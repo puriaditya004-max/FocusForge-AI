@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Mail, Lock, User, Eye, EyeOff, UserPlus, GraduationCap, Users, School, Calendar, Phone } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, UserPlus, GraduationCap, Users, School, Calendar, Phone, ShieldCheck } from "lucide-react";
 
 // ---------------------------------------------------------
 // Signup Page — same dark/purple theme as the rest of the app.
@@ -31,14 +31,19 @@ export default function Signup() {
   const [role, setRole] = useState("STUDENT");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verificationToken, setVerificationToken] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [pendingRole, setPendingRole] = useState("STUDENT");
 
-  const { signup } = useAuth();
+  const { signup, verifyEmail, resendEmailVerification } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setNotice("");
 
     if (!name || !email || !password || !confirmPassword || !dateOfBirth) {
       setError("Please fill in all fields.");
@@ -55,10 +60,51 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const user = await signup(name, email, password, role, dateOfBirth, mobileNumber);
-      navigate(ROLE_HOME[user.role] || "/dashboard");
+      const data = await signup(name, email, password, role, dateOfBirth, mobileNumber);
+      if (data.verificationToken) {
+        setVerificationToken(data.verificationToken);
+        setPendingRole(data.user?.role || role);
+        setNotice(data.devCode ? `OTP sent. Dev code: ${data.devCode}` : "OTP sent to your email. Verify to continue.");
+        return;
+      }
+      navigate(ROLE_HOME[data.user.role] || "/dashboard");
     } catch (err) {
       setError(err.message || "Signup failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyEmail(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!/^\d{6}$/.test(otpCode)) {
+      setError("Enter the 6-digit OTP.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await verifyEmail(verificationToken, otpCode);
+      navigate(ROLE_HOME[data.user.role] || ROLE_HOME[pendingRole] || "/dashboard");
+    } catch (err) {
+      setError(err.message || "Email verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    setError("");
+    setNotice("");
+    setLoading(true);
+    try {
+      const data = await resendEmailVerification(verificationToken);
+      setVerificationToken(data.verificationToken || verificationToken);
+      setNotice(data.devCode ? `OTP sent. Dev code: ${data.devCode}` : "New OTP sent to your email.");
+    } catch (err) {
+      setError(err.message || "Could not resend OTP.");
     } finally {
       setLoading(false);
     }
@@ -76,15 +122,61 @@ export default function Signup() {
         </div>
 
         <div className="bg-[#13131f] rounded-2xl border border-white/5 p-6">
-          <h2 className="text-sm font-semibold mb-1">Create your account</h2>
-          <p className="text-xs text-gray-500 mb-5">Start your study journey today.</p>
+          <h2 className="text-sm font-semibold mb-1">{verificationToken ? "Verify your email" : "Create your account"}</h2>
+          <p className="text-xs text-gray-500 mb-5">
+            {verificationToken ? "Enter the OTP sent to your email." : "Start your study journey today."}
+          </p>
 
+          {notice && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 mb-4">
+              <p className="text-xs text-green-300">{notice}</p>
+            </div>
+          )}
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-4">
               <p className="text-xs text-red-400">{error}</p>
             </div>
           )}
 
+          {verificationToken ? (
+            <form onSubmit={handleVerifyEmail} className="flex flex-col gap-4">
+              <div>
+                <label className="text-[11px] text-gray-500 mb-1 block">Email</label>
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-gray-100 opacity-70"
+                  />
+                </div>
+              </div>
+              <input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="6-digit OTP"
+                inputMode="numeric"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-100 tracking-[0.3em] focus:outline-none focus:border-purple-500/50"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-sm font-medium flex items-center justify-center gap-2 transition-all"
+              >
+                {loading ? "Verifying..." : <><ShieldCheck size={15} /> Verify Email</>}
+              </button>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={loading}
+                className="text-xs text-purple-300 hover:text-purple-200 disabled:opacity-50"
+              >
+                Resend OTP
+              </button>
+            </form>
+          ) : (
+            <>
           {/* Role picker */}
           <div className="mb-4">
             <label className="text-[11px] text-gray-500 mb-2 block">I am a...</label>
@@ -232,6 +324,8 @@ export default function Signup() {
             </a>
             .
           </p>
+            </>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-500 mt-5">

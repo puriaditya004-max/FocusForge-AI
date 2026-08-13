@@ -27,10 +27,10 @@ const OPTIONAL_PRODUCTION_GROUPS = [
     impact: "Paid course checkout, subscriptions, refunds, and webhook verification need these values.",
   },
   {
-    name: "Email OTP SMTP",
-    keys: ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"],
-    impact: "Email OTP delivery will fail unless SMTP or EMAIL_OTP_WEBHOOK_URL is configured.",
-    alternative: "EMAIL_OTP_WEBHOOK_URL",
+    name: "MSG91 Email OTP",
+    keys: ["MSG91_AUTH_KEY", "MSG91_EMAIL_TEMPLATE_ID", "MSG91_EMAIL_FROM", "MSG91_EMAIL_DOMAIN"],
+    impact: "Signup, login verification, and forgot-password email OTP delivery need these values.",
+    onlyWhen: () => String(process.env.OTP_EMAIL_PROVIDER || "").toLowerCase() === "msg91",
   },
   {
     name: "MSG91 OTP SMS",
