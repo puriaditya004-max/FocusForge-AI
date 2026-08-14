@@ -1,5 +1,10 @@
 const express = require("express");
 const router = express.Router();
+const { getPublicLaunchFlags } = require("../config/launchFlags");
+
+router.get("/launch-config", (req, res) => {
+  res.json({ features: getPublicLaunchFlags() });
+});
 
 const authRoutes = require("./auth.routes");
 router.use("/auth", authRoutes);

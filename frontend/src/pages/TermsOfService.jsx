@@ -95,9 +95,10 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-2">6. Study Rooms & community conduct</h2>
             <p>
-              Study Rooms are live, shared spaces. You agree not to post content that is harassing,
-              hateful, sexually explicit, illegal, or otherwise inappropriate for a platform used by
-              students. We may remove content or suspend accounts that violate this.
+              When Study Rooms are available, they are live, shared spaces. You agree not to post
+              content that is harassing, hateful, sexually explicit, illegal, or otherwise
+              inappropriate for a platform used by students. We may remove content or suspend
+              accounts that violate this.
             </p>
           </section>
 
@@ -154,7 +155,10 @@ export default function TermsOfService() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-2">12. Governing law</h2>
-            <p>These Terms are governed by the laws of India. [Specify your state/jurisdiction.]</p>
+            <p>
+              These Terms are governed by the laws of India. Subject to applicable law, courts in
+              Maharashtra, India will have jurisdiction.
+            </p>
           </section>
 
           <section>
