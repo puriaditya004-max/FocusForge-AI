@@ -238,7 +238,7 @@ export default function Signup() {
                 </div>
               </div>
 
-              <TextInput label="Full name" icon={User} value={name} setValue={setName} placeholder="Aditya Puri" />
+              <TextInput label="Full name" icon={User} value={name} setValue={setName} placeholder="Enter your full name" />
               <TextInput label="Email" icon={Mail} type="email" value={email} setValue={setEmail} placeholder="you@example.com" />
 
               <button
