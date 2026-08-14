@@ -15,6 +15,7 @@ const {
   deleteAccount,
 } = require("../controllers/auth.controller");
 const { requireAuth } = require("../middleware/auth.middleware");
+const { requireFeature } = require("../middleware/requireFeature.middleware");
 const { authLimiter } = require("../middleware/rateLimiter.middleware");
 const validate = require("../middleware/validate.middleware");
 const {
@@ -30,7 +31,7 @@ const {
   deleteAccountSchema,
 } = require("../validators/auth.validator");
 
-router.post("/signup", authLimiter, validate(signupSchema), signup);
+router.post("/signup", requireFeature("registration"), authLimiter, validate(signupSchema), signup);
 router.post("/login", authLimiter, validate(loginSchema), login);
 router.post("/onboarding/complete", requireAuth, authLimiter, validate(completeOnboardingSchema), completeOnboarding);
 router.post("/email/verify", authLimiter, validate(verifyEmailSchema), verifyEmail);

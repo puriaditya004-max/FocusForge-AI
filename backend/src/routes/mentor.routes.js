@@ -6,6 +6,7 @@ const express = require("express");
 const router = express.Router();
 
 const { requireAuth } = require("../middleware/auth.middleware");
+const { requireFeature } = require("../middleware/requireFeature.middleware");
 const { requirePremiumAccess } = require("../middleware/subscription.middleware");
 const validate = require("../middleware/validate.middleware");
 const { aiDailyLimiter, aiBurstLimiter } = require("../middleware/rateLimiter.middleware");
@@ -26,6 +27,8 @@ const {
 } = require("../controllers/mentor.controller");
 
 // GET /api/mentor/history — load full chat history for logged-in student
+router.use(requireFeature("ai"));
+
 router.get("/history", requireAuth, getHistory);
 
 // POST /api/mentor/message — send a message (text and/or photo/PDF), get AI reply back

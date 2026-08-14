@@ -6,6 +6,7 @@ import ProtectedRoute from "./context/ProtectedRoute";
 import HeyForgeWidget from "./components/HeyForgeWidget";
 import FocusForgeLoader from "./components/FocusForgeLoader";
 import PremiumGate from "./components/PremiumGate";
+import { launchFlags } from "./config/launchFlags";
 
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
@@ -179,7 +180,7 @@ export default function App() {
             path="/study-room"
             element={
               <ProtectedRoute allowedRoles={["STUDENT"]}>
-                <StudyRoom />
+                {launchFlags.studyRoom ? <StudyRoom /> : <Navigate to="/dashboard" replace />}
               </ProtectedRoute>
             }
           />

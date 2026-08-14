@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { launchFlags } from "../config/launchFlags";
 import {
   LayoutDashboard,
   CalendarClock,
@@ -26,7 +27,9 @@ const navItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { key: "timetable", label: "Smart Timetable", icon: CalendarClock, path: "/timetable" },
   { key: "plan", label: "Today's Plan", icon: ClipboardList, path: "/todays-plan" },
-  { key: "study-room", label: "Study Room", icon: Users, path: "/study-room" },
+  ...(launchFlags.studyRoom
+    ? [{ key: "study-room", label: "Study Room", icon: Users, path: "/study-room" }]
+    : []),
   { key: "ai-mentor", label: "AI Mentor", icon: Bot, path: "/ai-mentor" },
   { key: "quiz", label: "Quiz Generator", icon: Brain, path: "/quiz" },
   { key: "youtube", label: "YouTube Suggestions", icon: Youtube, path: "/youtube" },

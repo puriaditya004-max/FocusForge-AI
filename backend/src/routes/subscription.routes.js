@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { requireAuth } = require("../middleware/auth.middleware");
 const { requireParentalConsentIfMinor } = require("../middleware/ageGate.middleware");
+const { requireFeature } = require("../middleware/requireFeature.middleware");
 const { paymentLimiter } = require("../middleware/rateLimiter.middleware");
 const {
   getMySubscription,
@@ -40,12 +41,13 @@ router.post(
   "/order",
   requireAuth,
   requireStudentOrParent,
+  requireFeature("payments"),
   paymentLimiter,
   parentalConsentForStudentsOnly,
   createSubscriptionOrder
 );
-router.post("/verify", requireAuth, requireStudentOrParent, paymentLimiter, verifySubscriptionPayment);
-router.post("/fail", requireAuth, requireStudentOrParent, paymentLimiter, markSubscriptionPaymentFailed);
+router.post("/verify", requireAuth, requireStudentOrParent, requireFeature("payments"), paymentLimiter, verifySubscriptionPayment);
+router.post("/fail", requireAuth, requireStudentOrParent, requireFeature("payments"), paymentLimiter, markSubscriptionPaymentFailed);
 router.post("/cancel", requireAuth, requireStudentOrParent, paymentLimiter, cancelMySubscription);
 
 module.exports = router;

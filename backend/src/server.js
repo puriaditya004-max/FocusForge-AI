@@ -10,6 +10,7 @@ const studyRoomSocket = require("./sockets/studyroom.socket");
 const redisClient = require("./config/redis");
 const logger = require("./utils/logger");
 const { validateProductionEnv } = require("./config/env");
+const { isFeatureEnabled } = require("./config/launchFlags");
 
 validateProductionEnv();
 
@@ -43,12 +44,18 @@ const allowedOrigins = [
   "capacitor://localhost",
 ].filter(Boolean);
 
-const io = new Server(httpServer, {
-  cors: {
-    origin: allowedOrigins,
-    credentials: true,
-  },
-});
+let io = null;
+
+if (isFeatureEnabled("studyRoom")) {
+  io = new Server(httpServer, {
+    cors: {
+      origin: allowedOrigins,
+      credentials: true,
+    },
+  });
+} else {
+  logger.info("Study Room sockets disabled by ENABLE_STUDY_ROOM flag.");
+}
 
 // Without this, if Render ever runs more than one instance of this
 // backend, a "join_room"/"send_message" handled by instance A never
@@ -59,6 +66,7 @@ const io = new Server(httpServer, {
 // one a given client is connected to. On a single instance (or with
 // no REDIS_URL set) this is a no-op and behavior is unchanged.
 async function attachRedisAdapter() {
+  if (!io) return;
   if (!redisClient) return;
   try {
     const { createAdapter } = require("@socket.io/redis-adapter");
@@ -72,7 +80,9 @@ async function attachRedisAdapter() {
 }
 attachRedisAdapter();
 
-studyRoomSocket(io);
+if (io) {
+  studyRoomSocket(io);
+}
 
 httpServer.listen(PORT, () => {
   logger.info(`✅ FocusForge AI backend running on http://localhost:${PORT}`);

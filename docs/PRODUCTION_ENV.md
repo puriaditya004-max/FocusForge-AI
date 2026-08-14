@@ -26,6 +26,16 @@ Strongly recommended:
 - `S3_REGION`
 - `PUBLIC_BASE_URL`
 
+Launch feature flags:
+
+- `ENABLE_REGISTRATION=true`
+- `ENABLE_PAYMENTS=true`
+- `ENABLE_STUDY_ROOM=false`
+- `ENABLE_AI=true`
+- `ENABLE_MARKETPLACE=true`
+
+Keep `ENABLE_STUDY_ROOM=false` for the first paid launch. The backend blocks direct Study Room API and Socket.IO access unless this flag is explicitly set to `true`.
+
 Payments and subscriptions:
 
 - `RAZORPAY_KEY_ID`
@@ -74,6 +84,7 @@ Required:
 Optional:
 
 - `VITE_PLAY_STORE_BUILD=true` for Android builds that must hide non-Play billing paths.
+- `VITE_ENABLE_STUDY_ROOM=false` for the first paid launch.
 
 ## Admin App: Vercel
 

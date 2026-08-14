@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { requireAuth, requireRole } = require("../middleware/auth.middleware");
 const { requireParentalConsentIfMinor } = require("../middleware/ageGate.middleware");
+const { requireFeature } = require("../middleware/requireFeature.middleware");
 const { paymentLimiter } = require("../middleware/rateLimiter.middleware");
 const {
   createCoursePaymentOrder,
@@ -18,11 +19,12 @@ router.post(
   "/courses/:courseId/order",
   requireAuth,
   requireRole("STUDENT"),
+  requireFeature("payments"),
   paymentLimiter,
   requireParentalConsentIfMinor,
   createCoursePaymentOrder
 );
-router.post("/verify", requireAuth, requireRole("STUDENT"), paymentLimiter, verifyCoursePayment);
+router.post("/verify", requireAuth, requireRole("STUDENT"), requireFeature("payments"), paymentLimiter, verifyCoursePayment);
 router.get("/", requireAuth, listMyPayments);
 router.post("/:paymentId/refund-request", requireAuth, requireRole("STUDENT"), requestRefund);
 router.post("/refunds/:refundId/process", requireAuth, requireRole("ADMIN"), paymentLimiter, processRefund);
